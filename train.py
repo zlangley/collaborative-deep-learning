@@ -1,4 +1,5 @@
 from collections import namedtuple
+import logging
 
 import torch
 import torch.cuda
@@ -11,22 +12,18 @@ Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 
 
 def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
-    print('Training CDL')
+    logging.info('Beginning CDL training')
     for epoch in range(epochs):
-        print('Epoch', epoch + 1)
-
-        # Each epoch is one iteration of gradient descent (for the SDAE)
-        # followed by one iteration of coordinate ascent (for U and V).
-
-        # The parameters U and V are not updated below since they have
-        # require_grad=False.  However, their values will influence the loss
-        # and therefore the gradients of the SDAE.
-#        print('  fine-tuning SDAE...')
-#        train(cdl, dataset.content, batch_size, sdae_loss(cdl.sdae, lambdas), optimizer)
+        # Each epoch is one iteration of gradient descent which only updates the SDAE
+        # parameters; the matrices U and V of the CDL have require_grad=False.
+        # These matrices are instead updated manually with the coordinate ascent algorithm.
+        logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
         encoded = cdl.sdae.encode(dataset.content)
+
+        # TODO: We should probably still use batches?
         loss = cdl_loss(cdl, dataset.content, dataset.ratings, encoded, conf, lambdas, device=device)
-        print(f'  loss: {loss:>7f}')
+        logging.info(f'  current loss: {loss:>7f}')
 
         # Update SDAE weights.
         optimizer.zero_grad()
@@ -104,22 +101,22 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
 
 
 def train_sdae(sdae, dataset, loss_fn, optimizer, epochs, batch_size):
+    logging.info('Beginning CDL training')
     cur_input = dataset
 
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
-        print(f'Training Layer', i + 1)
+        logging.info(f'Training layer {i + 1}/{len(sdae.autoencoders)}')
         for epoch in range(epochs):
-            print('Epoch', epoch + 1)
+            logging.info(f'Staring epoch {epoch + 1}/{epochs}')
             train(autoencoder, cur_input, batch_size, loss_fn, optimizer)
 
         with torch.no_grad():
             cur_input = autoencoder.encode(cur_input)
 
     # Fine-tuning.
-    print(f'Fine-tuning SDAE')
     for epoch in range(epochs):
-        print('Epoch', epoch + 1)
+        logging.info(f'Staring epoch {epoch + 1}/{epochs}')
         train(sdae, dataset, batch_size, loss_fn, optimizer)
 
 
@@ -137,7 +134,7 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
 
         if batch % 100 == 0:
             current = batch * len(X_b)
-            print(f'loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
+            logging.info(f'  current loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
 
 def sdae_loss(sdae, lambdas):
