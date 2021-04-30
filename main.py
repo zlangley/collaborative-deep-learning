@@ -15,6 +15,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command')
     parser.add_argument('--device', default='cpu')
+    parser.add_argument('--resume', action='store_true')
 
     parser.add_argument('--sdae_in', default='sdae.pt')
     parser.add_argument('--sdae_out', default='sdae.pt')
@@ -87,35 +88,36 @@ if __name__ == '__main__':
     optimizer = optim.Adam(cdl.parameters(), lr=args.lr)
 
     if args.command == 'train_sdae':
-        save_path = args.sdae_out
+        if args.resume:
+            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
+            cdl.sdae.load_state_dict(torch.load(args.sdae_in))
 
         cdl.sdae.to(device)
 
         logging.info(f'Training SDAE')
         train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=args.epochs, batch_size=args.batch_size)
 
+        logging.info(f'Saving SDAE model to {args.sdae_out}.')
         cdl.sdae.cpu()
-
-        logging.info(f'Saving SDAE model to {save_path}.')
-        torch.save(cdl.sdae.state_dict(), save_path)
-        logging.info(f'Complete')
+        torch.save(cdl.sdae.state_dict(), args.sdae_out)
 
     elif args.command == 'train_cdl':
-        load_path = args.sdae_in
-        save_path = args.cdl_out
+        if args.resume:
+            logging.info(f'Loading pre-trained CDL from {args.cdl_in}')
+            cdl.load_state_dict(torch.load(args.cdl_in))
+        else:
+            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
+            cdl.sdae.load_state_dict(torch.load(args.sdae_in))
 
-        state_dict = torch.load(load_path, map_location=device)
-        cdl.sdae.load_state_dict(state_dict)
+        cdl.sdae.to(device)
 
         logging.info(f'Training CDL')
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
         train_cdl(cdl, dataset, optimizer, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
+        logging.info(f'Saving CDL model to {args.cdl_out}')
         cdl.sdae.cpu()
-
-        logging.info(f'Saving CDL model to {save_path}')
-        torch.save(cdl.state_dict(), save_path)
-        logging.info(f'Complete')
+        torch.save(cdl.state_dict(), args.cdl_out)
 
     elif args.command == 'predict':
         load_path = args.cdl_in
@@ -137,3 +139,5 @@ if __name__ == '__main__':
         recall = gathered.sum(dim=1) / ratings_test_dataset.sum(dim=1)
 
         print(f'recall@{args.recall}: {recall.mean().item()}')
+
+    logging.info(f'Complete')
