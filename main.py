@@ -37,9 +37,7 @@ if __name__ == '__main__':
         lambda_w=1.0,
     ).to(device)
 
-    a = 1
-    b = 0.01
-    confidence_matrix = ratings_training_dataset * (a - b) + b * torch.ones_like(ratings_training_dataset)
+    conf = (1, 0.01)
 
     def sdae_loss(pred, actual):
         # pred = torch.clamp(pred, min=1e-16)
@@ -70,7 +68,7 @@ if __name__ == '__main__':
     print('sdae validation loss', sdae_loss(x, content_validation_dataset))
 
     cdl.sdae.train()
-    train_cdl(cdl, content_dataset, ratings_training_dataset, confidence_matrix, optimizer, epochs=10, batch_size=60)
+    train_cdl(cdl, content_dataset, ratings_training_dataset, optimizer, conf=(1, 0.01), epochs=10, batch_size=60)
     torch.save(cdl.state_dict(), 'cdl.pt')
 
     ratings_pred = cdl.U @ cdl.V.t()

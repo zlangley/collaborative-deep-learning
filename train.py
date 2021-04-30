@@ -4,7 +4,9 @@ from torch import autograd
 from torch.utils.data import DataLoader
 
 
-def train_cdl(cdl, content_dataset, ratings_matrix, confidence_matrix, optimizer, epochs, batch_size):
+def train_cdl(cdl, content_dataset, ratings_matrix, optimizer, conf, epochs, batch_size):
+    confidence_matrix = ratings_matrix * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings_matrix)
+
     with autograd.no_grad():
         encoded_dataset = cdl.sdae.encode(content_dataset)
 
@@ -28,14 +30,14 @@ def train_cdl(cdl, content_dataset, ratings_matrix, confidence_matrix, optimizer
         num_iters = 1
 
         with autograd.no_grad():
-            coordinate_ascent(cdl, ratings_matrix, confidence_matrix, encoded_dataset, num_iters)
+            coordinate_ascent(cdl, ratings_matrix, conf, encoded_dataset, num_iters)
 
         # This training will only tweak the SDAE parameters, but it will use the weights
         # U and V in the loss.
         train(cdl, content_dataset, batch_size, cdl_loss, optimizer)
 
 
-def coordinate_ascent(cdl, R, C, enc, num_iters):
+def coordinate_ascent(cdl, R, conf, enc, num_iters):
     """
     :param U: The latent users matrix of shape (num_users, latent_size).
     :param V: The latent items matrix of shape (num_items, latent_size).
@@ -46,11 +48,9 @@ def coordinate_ascent(cdl, R, C, enc, num_iters):
     latent_size = cdl.U.shape[1]
     idu = cdl.lambda_u * torch.eye(latent_size, device=R.device)
     idv = cdl.lambda_v * torch.eye(latent_size, device=R.device)
+    conf_a, conf_b = conf
 
     scaled_enc = enc * cdl.lambda_v
-    # FIXME
-    conf_a = 1
-    conf_b = 0.01
 
     for i in range(num_iters):
         print('Updated U...')
