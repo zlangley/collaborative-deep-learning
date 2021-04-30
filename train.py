@@ -25,10 +25,7 @@ def train_cdl(cdl, content_dataset, ratings_matrix, confidence_matrix, optimizer
     print('Training CDL')
     for epoch in range(epochs):
         print('Epoch', epoch + 1)
-        if epoch == epochs - 1:
-            num_iters = 20
-        else:
-            num_iters = 1
+        num_iters = 1
 
         with autograd.no_grad():
             coordinate_ascent(cdl, ratings_matrix, confidence_matrix, encoded_dataset, num_iters)
@@ -47,34 +44,51 @@ def coordinate_ascent(cdl, R, C, enc, num_iters):
     :param enc: The encodings of the content of shape (num_items, latent_size).
     """
     latent_size = cdl.U.shape[1]
-    idu = cdl.lambda_u * torch.eye(latent_size)
-    idv = cdl.lambda_v * torch.eye(latent_size)
+    idu = cdl.lambda_u * torch.eye(latent_size, device=R.device)
+    idv = cdl.lambda_v * torch.eye(latent_size, device=R.device)
 
     scaled_enc = enc * cdl.lambda_v
+    # FIXME
+    conf_a = 1
+    conf_b = 0.01
 
     for i in range(num_iters):
-        VC = torch.empty(len(cdl.U), cdl.V.shape[1], cdl.V.shape[0])
-        # VC.shape: (num_users, latent_size, num_users)
+        print('Updated U...')
+        VtV = conf_b * cdl.V.t() @ cdl.V
         for j in range(len(cdl.U)):
-            VC[j] = cdl.V.t() * C[j]
+            rated_idx = R[j].nonzero().squeeze(1)
+            Vr = cdl.V[rated_idx, :]
+            A = VtV + (conf_a - conf_b) * Vr.t() @ Vr + idu
+            b = Vr.t() @ R[j, rated_idx]
+#            VC = cdl.V.t() * C[j]
+#            A = VC @ cdl.V + idu
+#            b = VC @ R[j]
+            cdl.U[j] = linalg.solve(A, b)
 
-        A = torch.matmul(VC, cdl.V)
-        # A.shape: (num_users, latent_size, latent_size)
-        B = torch.matmul(VC, R)
-        # B.shape: (num_users, latent_size, num_items)
-        cdl.U = linalg.solve(A, B)
+        print('Updated U.')
+        print('Updating V...')
 
-        UC = torch.tempty(len(cdl.V), cdl.U.shape[1], cdl.U.shape[0])
+        UtU = conf_b * cdl.U.t() @ cdl.U
         for j in range(len(cdl.V)):
-            UC[j] = cdl.U.t() * C[:, j]
+            A = UtU + idv
+            b = scaled_enc[j]
 
-        A = torch.matmul(UC, cdl.U)
-        B = torch.matmul(UC, R.t()) + scaled_enc
-        cdl.V = linalg.solve(A, B)
+            rated_idx = R[:, j].nonzero().squeeze(1)
+            if len(rated_idx):
+                Ur = cdl.U[rated_idx, :]
+                A += (conf_a - conf_b) * Ur.t() @ Ur
+                b += Ur.t() @ R[rated_idx, j]
+
+            #UC = cdl.U.t() * C[:, j]
+            #A = UC @ cdl.U + idv
+            #b = UC @ R[:, j] + scaled_enc[j]
+            cdl.V[j] = linalg.solve(A, b)
+
+        print('Updated V.')
 
 
 def train_sdae(sdae, dataset, loss_fn, optimizer, epochs, batch_size):
-    cur_input = dataset
+    cur_input = dataset.to('cuda:3')
 
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
@@ -98,6 +112,7 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
     size = len(dataloader.dataset)
 
     for batch, X_b in enumerate(dataloader):
+        X_b = X_b.to('cuda:3')
         pred = model(X_b)
         loss = loss_fn(pred, X_b)
 

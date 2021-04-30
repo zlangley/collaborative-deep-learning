@@ -26,8 +26,8 @@ class CollaborativeDeepLearning(nn.Module):
         latent_size = layer_sizes[-1]
 
         # Not parameters; we train these manually with coordinate descent.
-        self.U = Variable(torch.Tensor(num_users, latent_size), requires_grad=False)
-        self.V = Variable(torch.Tensor(num_items, latent_size), requires_grad=False)
+        self.U = nn.Parameter(torch.Tensor(num_users, latent_size), requires_grad=False)
+        self.V = nn.Parameter(torch.Tensor(num_items, latent_size), requires_grad=False)
         nn.init.xavier_uniform_(self.U)
         nn.init.xavier_uniform_(self.V)
 

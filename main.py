@@ -8,7 +8,7 @@ from sdae import StackedDenoisingAutoencoder
 from train import train_sdae, train_cdl
 
 if __name__ == '__main__':
-    content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat')
+    content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat').to('cuda:3')
     # dataset.shape: (16980, 8000)
 
     # FIXME: ratings data set only has 16970 articles
@@ -17,7 +17,7 @@ if __name__ == '__main__':
     content_training_dataset = content_dataset[:15282]
     content_validation_dataset = content_dataset[:15282]
 
-    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat')
+    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat').to('cuda:3')
 
     cdl = CollaborativeDeepLearning(
         in_features=content_training_dataset.shape[1],
@@ -30,7 +30,7 @@ if __name__ == '__main__':
         lambda_v=100.0,
         lambda_n=100.0,
         lambda_w=1.0,
-    )
+    ).to('cuda:3')
 
     a = 1
     b = 0.01
@@ -51,20 +51,21 @@ if __name__ == '__main__':
 
     optimizer = optim.Adam(cdl.parameters())
 
-    load_pretrain = False
+    load_pretrain = True
     if load_pretrain:
         cdl.sdae.load_state_dict(torch.load('sdae.pt'))
     else:
         print('Pretraining...')
-        train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=50, batch_size=60)
+        train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=20, batch_size=60)
         torch.save(cdl.sdae.state_dict(), 'sdae.pt')
 
     cdl.sdae.eval()
-    x = cdl.sdae(content_validation_dataset)
+    x = cdl.sdae(content_validation_dataset.to('cuda:3'))
     print('sdae validation loss', sdae_loss(x, content_validation_dataset))
 
     cdl.sdae.train()
-    train_cdl(cdl, content_dataset, ratings_training_dataset, confidence_matrix, optimizer, epochs=2, batch_size=60)
+    train_cdl(cdl, content_dataset, ratings_training_dataset, confidence_matrix, optimizer, epochs=10, batch_size=60)
+    torch.save(cdl.state_dict(), 'cdl.pt')
 
     ratings_pred = cdl.U @ cdl.V.t()
     print(ratings_training_dataset[0])
