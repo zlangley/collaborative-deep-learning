@@ -1,3 +1,5 @@
+import argparse
+
 import torch
 import torch.optim as optim
 
@@ -8,10 +10,11 @@ from train import train_sdae, train_cdl
 
 
 if __name__ == '__main__':
-    if torch.cuda.is_available():
-        device = 'cuda:3'
-    else:
-        device = 'cpu'
+    parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
+    parser.add_argument('--device', help='set device')
+    args = parser.parse_args()
+
+    device = args.device or 'cpu'
 
     content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat').to(device)
     # dataset.shape: (16980, 8000)
