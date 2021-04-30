@@ -43,10 +43,7 @@ if __name__ == '__main__':
         dropout=0.0,
     ).to(device)
 
-    conf = (1, 0.01)
-
-    optimizer = optim.Adam(cdl.parameters())
-
+    optimizer = optim.Adam(cdl.parameters(), lr=5e-3)
 
     load_pretrain = True
     if load_pretrain:
@@ -66,7 +63,7 @@ if __name__ == '__main__':
 
     cdl.sdae.train()
     dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-    train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=10, batch_size=60)
+    train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=20, batch_size=60)
     torch.save(cdl.state_dict(), 'cdl.pt')
 
     ratings_pred = cdl.U @ cdl.V.t()
