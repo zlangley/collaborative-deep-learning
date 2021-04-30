@@ -36,3 +36,23 @@ def _parse_mult_dat_line(line):
         max_word_id = max(max_word_id, word_id)
 
     return bow, max_word_id
+
+
+def read_ratings(filename):
+    adj = []
+    max_item_id = 0
+
+    with open(filename) as f:
+        for line in f:
+            nums = [int(x) for x in line.split()[1:]]
+            max_item_id = max(max_item_id, max(nums))
+            adj.append(nums)
+
+    R = torch.zeros(len(adj), max_item_id + 1)
+
+    for u, vs in enumerate(adj):
+        for v in vs:
+            R[u, v] = 1
+
+    return R
+

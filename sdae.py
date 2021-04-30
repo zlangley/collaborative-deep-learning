@@ -3,6 +3,37 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class StackedDenoisingAutoencoder(nn.Module):
+    def __init__(self, in_features, layer_sizes, corruption, dropout):
+        super().__init__()
+
+        dims = zip([in_features] + layer_sizes[:-1], layer_sizes)
+        self.autoencoders = nn.ModuleList([
+            DenoisingAutoencoder(rows, cols, corruption, dropout)
+            for rows, cols in dims
+        ])
+        self._dropout = dropout
+
+    # TODO: other initialization?
+
+    def forward(self, x):
+        x = self.encode(x)
+
+        for autoencoder in reversed(self.autoencoders):
+            x = F.dropout(x, self._dropout)
+            x = autoencoder.decode(x)
+
+        return x
+
+    def encode(self, x):
+        for i, autoencoder in enumerate(self.autoencoders):
+            if self.training and i != 0:
+                x = F.dropout(x, self._dropout)
+            x = autoencoder.encode(x)
+
+        return x
+
+
 class DenoisingAutoencoder(nn.Module):
     def __init__(self, in_features, encoding_size, corruption, dropout):
         """
@@ -40,36 +71,5 @@ class DenoisingAutoencoder(nn.Module):
 
     def decode(self, x):
         x = self._decoder(x)
-        x = torch.sigmoid(x)
-        return x
-
-
-class StackedDenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, encoding_sizes, corruption, dropout):
-        super().__init__()
-
-        dims = zip([in_features] + encoding_sizes[:-1], encoding_sizes)
-        self.autoencoders = nn.ModuleList([
-            DenoisingAutoencoder(rows, cols, corruption, dropout)
-            for rows, cols in dims
-        ])
-        self._dropout = dropout
-
-    # TODO: other initialization?
-
-    def forward(self, x):
-        for autoencoder in self.autoencoders:
-            x = F.dropout(x, self._dropout)
-            x = autoencoder.encode(x)
-
-        for autoencoder in reversed(self.autoencoders):
-            x = F.dropout(x, self._dropout)
-            x = autoencoder.decode(x)
-
-        return x
-
-    def encode(self, x):
-        for autoencoder in self.autoencoders:
-            x = autoencoder.encode(x)
-
+        #x = torch.sigmoid(x)
         return x
