@@ -37,11 +37,9 @@ if __name__ == '__main__':
     device = args.device
     logging.info(f'Using device {device}')
 
+    logging.info('Loading dataset')
     content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat')
     # dataset.shape: (16980, 8000)
-
-    # FIXME: ratings data set only has 16970 articles
-    content_dataset = content_dataset[:16970]
 
     content_training_dataset = content_dataset[:15282]
     content_validation_dataset = content_dataset[:15282]
@@ -74,14 +72,14 @@ if __name__ == '__main__':
         content_dataset = content_dataset.to(device)
         cdl.sdae.to(device)
 
+        logging.info(f'Training SDAE')
         train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=20, batch_size=60)
-        logging.info(f'Finished training SDAE')
 
         cdl.sdae.cpu()
 
+        logging.info(f'Saving SDAE model to {save_path}.')
         torch.save(cdl.sdae.state_dict(), save_path)
-        logging.info(f'Saved SDAE model to {save_path}.')
-        sys.exit(0)
+        logging.info(f'Complete')
 
     elif args.command == 'train_cdl':
         load_path = args.sdae_in
@@ -93,25 +91,29 @@ if __name__ == '__main__':
         content_dataset = content_dataset.to(device)
         cdl.sdae.to(device)
 
+        logging.info(f'Training CDL')
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
         train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=20, batch_size=60, device=device)
-        logging.info(f'Finished training CDL')
 
         cdl.sdae.cpu()
 
+        logging.info(f'Saving CDL model to {save_path}')
         torch.save(cdl.state_dict(), save_path)
-        logging.info(f'Saved CDL model to {save_path}')
+        logging.info(f'Complete')
 
     elif args.command == 'predict':
         load_path = args.cdl_in
         recall = args.recall
 
+        logging.info(f'Loading CDL from {load_path}')
         state_dict = torch.load(load_path)
         cdl.load_state_dict(state_dict)
         cdl.eval()
 
+        logging.info(f'Predicting')
         pred = cdl.predict()
 
+        logging.info(f'Calculating recall@{args.recall}')
         _, indices = torch.sort(pred, dim=1, descending=True)
         top = indices[:, :args.recall]
 
