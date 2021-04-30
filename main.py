@@ -42,26 +42,17 @@ if __name__ == '__main__':
 
     conf = (1, 0.01)
 
-    def sdae_loss(pred, actual):
-        # pred = torch.clamp(pred, min=1e-16)
-        # actual = torch.clamp(actual, min=1e-16)
-        # cross_entropies = -(actual * torch.log(pred) + (1 - actual) * torch.log(1 - pred)).sum(dim=1)
-        # return cross_entropies.mean()
-
-        loss = 0
-        for param in cdl.sdae.parameters():
-            loss += (param * param).sum() * lambdas.w / 2
-
-        loss += ((pred - actual) ** 2).sum() * lambdas.n / 2
-        return loss
-
     optimizer = optim.Adam(cdl.parameters())
+
 
     load_pretrain = True
     if load_pretrain:
         state_dict = torch.load('sdae.pt', map_location=device)
         cdl.sdae.load_state_dict(state_dict)
-    else:
+
+    sdae_loss = train.sdae_loss(cdl.sdae, lambdas)
+
+    if not load_pretrain:
         print('Pretraining...')
         train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=20, batch_size=60)
         torch.save(cdl.sdae.state_dict(), 'sdae.pt')
@@ -71,7 +62,7 @@ if __name__ == '__main__':
     print('sdae validation loss', sdae_loss(x, content_validation_dataset))
 
     cdl.sdae.train()
-    dataset = train.Dataset(content_dataset, ratings_training_dataset)
+    dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
     train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=10, batch_size=60)
     torch.save(cdl.state_dict(), 'cdl.pt')
 

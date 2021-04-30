@@ -8,28 +8,13 @@ from torch.utils.data import DataLoader
 
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
-Dataset = namedtuple('Dataset', ['content', 'ratings'])
 
 
 def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size):
-    confidence_matrix = dataset.ratings * (conf[0] - conf[1]) + conf[1] * torch.ones_like(dataset.ratings)
-
     with autograd.no_grad():
         encoded_dataset = cdl.sdae.encode(dataset.content)
 
-    def cdl_loss(cdl_out, actual):
-        reconstruction, ratings_pred = cdl_out
-
-        loss = 0
-        for param in cdl.sdae.parameters():
-            loss += (param ** 2).sum() * lambdas.w / 2
-
-        loss += ((reconstruction - actual) ** 2).sum() * lambdas.n / 2
-        loss += (cdl.U ** 2).sum() * lambdas.u / 2
-        loss += ((cdl.V - encoded_dataset) ** 2).sum() * lambdas.v / 2
-        loss += (confidence_matrix * (dataset.ratings - ratings_pred) ** 2).sum() / 2
-
-        return loss
+    loss = cdl_loss(cdl, conf, lambdas)
 
     print('Training CDL')
     for epoch in range(epochs):
@@ -47,7 +32,22 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size):
         # require_grad=False.  However, their values will influence the loss
         # and therefore the gradients of the SDAE.
         print('  running gradient descent...')
-        train(cdl, dataset.content, batch_size, cdl_loss, optimizer)
+        train(cdl, dataset, batch_size, loss, optimizer)
+
+
+class ContentRatingsDataset:
+    def __init__(self, content, ratings):
+        # content.shape: (num_items, num_item_features)
+        # ratings.shape: (num_users, num_items)
+        self.content = content
+        self.ratings = ratings
+
+    def __getitem__(self, item):
+        # Used for gradient descent training; ith training item expects entire rating matrix for loss.
+        return self.content[item], self.ratings
+
+    def __len__(self):
+        return len(self.content)
 
 
 def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
@@ -140,3 +140,38 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
         if batch % 100 == 0:
             current = batch * len(X_b)
             print(f'loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
+
+
+def sdae_loss(sdae, lambdas):
+    def _sdae_loss(pred, actual):
+        # pred = torch.clamp(pred, min=1e-16)
+        # actual = torch.clamp(actual, min=1e-16)
+        # cross_entropies = -(actual * torch.log(pred) + (1 - actual) * torch.log(1 - pred)).sum(dim=1)
+        # return cross_entropies.mean()
+
+        loss = 0
+        for param in sdae.parameters():
+            loss += (param * param).sum() * lambdas.w / 2
+
+        loss += ((pred - actual) ** 2).sum() * lambdas.n / 2
+        return loss
+
+    return _sdae_loss
+
+
+def cdl_loss(cdl, conf, lambdas):
+    def _cdl_loss(pred, actual):
+        content_pred, ratings_pred = pred
+        content_actual, ratings_actual = actual
+
+        confidence_matrix = ratings_actual * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings_actual)
+
+        loss = 0
+        loss += sdae_loss(cdl.sdae, lambdas)(content_pred, content_actual)
+        loss += (cdl.U ** 2).sum() * lambdas.u / 2
+        loss += ((cdl.V - encoded_dataset) ** 2).sum() * lambdas.v / 2
+        loss += (confidence_matrix * (ratings_actual - ratings_pred) ** 2).sum() / 2
+
+        return loss
+
+    return _cdl_loss

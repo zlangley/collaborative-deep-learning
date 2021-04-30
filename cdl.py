@@ -6,15 +6,7 @@ from sdae import StackedDenoisingAutoencoder
 
 
 class CollaborativeDeepLearning(nn.Module):
-    def __init__(
-            self,
-            in_features,
-            num_users,
-            num_items,
-            layer_sizes,
-            corruption,
-            dropout,
-    ):
+    def __init__(self, in_features, num_users, num_items, layer_sizes, corruption, dropout):
         super().__init__()
 
         self.sdae = StackedDenoisingAutoencoder(in_features, layer_sizes, corruption, dropout)
@@ -28,6 +20,8 @@ class CollaborativeDeepLearning(nn.Module):
         nn.init.xavier_uniform_(self.V)
 
     def forward(self, x):
+        # Second input is the ratings matrix; ignore it.
+        x, _ = x
         reconstruction = self.sdae(x)
         ratings_pred = self.U @ self.V.t()
         return reconstruction, ratings_pred
