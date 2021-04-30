@@ -1,7 +1,7 @@
 import torch
 
 
-def read_mult_dat(filename):
+def read_mult_dat(filename, map_location='cpu'):
     document_words = []
 
     max_id = 0
@@ -13,7 +13,7 @@ def read_mult_dat(filename):
 
             document_words.append(bow)
 
-    X = torch.zeros(len(document_words), max_id + 1)
+    X = torch.zeros((len(document_words), max_id + 1), device=map_location)
     for i, bow in enumerate(document_words):
         for word_id, count in bow.items():
             X[i, word_id] = count
@@ -38,7 +38,7 @@ def _parse_mult_dat_line(line):
     return bow, max_word_id
 
 
-def read_ratings(filename):
+def read_ratings(filename, map_location='cpu'):
     adj = []
     max_item_id = 0
 
@@ -48,8 +48,9 @@ def read_ratings(filename):
             max_item_id = max(max_item_id, max(nums))
             adj.append(nums)
 
-    R = torch.zeros(len(adj), max_item_id + 1)
+    R = torch.zeros((len(adj), max_item_id + 1), device=map_location)
 
+    # TODO: use torch.scatter?
     for u, vs in enumerate(adj):
         for v in vs:
             R[u, v] = 1

@@ -38,8 +38,11 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info('Loading dataset')
-    content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat')
+    content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat', map_location=device)
     # dataset.shape: (16980, 8000)
+
+    # FIXME: the ratings matrix only has 16970 items...
+    content_dataset = content_dataset[:16970]
 
     content_training_dataset = content_dataset[:15282]
     content_validation_dataset = content_dataset[:15282]
@@ -69,7 +72,6 @@ if __name__ == '__main__':
     if args.command == 'train_sdae':
         save_path = args.sdae_out
 
-        content_dataset = content_dataset.to(device)
         cdl.sdae.to(device)
 
         logging.info(f'Training SDAE')
@@ -85,11 +87,8 @@ if __name__ == '__main__':
         load_path = args.sdae_in
         save_path = args.cdl_out
 
-        state_dict = torch.load(load_path)
+        state_dict = torch.load(load_path, map_location=device)
         cdl.sdae.load_state_dict(state_dict)
-
-        content_dataset = content_dataset.to(device)
-        cdl.sdae.to(device)
 
         logging.info(f'Training CDL')
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
@@ -106,7 +105,7 @@ if __name__ == '__main__':
         recall = args.recall
 
         logging.info(f'Loading CDL from {load_path}')
-        state_dict = torch.load(load_path)
+        state_dict = torch.load(load_path, map_location=device)
         cdl.load_state_dict(state_dict)
         cdl.eval()
 
