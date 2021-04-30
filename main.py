@@ -1,11 +1,11 @@
 import torch
-import torch.nn as nn
 import torch.optim as optim
 
 import data
+import train
 from cdl import CollaborativeDeepLearning
-from sdae import StackedDenoisingAutoencoder
 from train import train_sdae, train_cdl
+
 
 if __name__ == '__main__':
     if torch.cuda.is_available():
@@ -24,6 +24,13 @@ if __name__ == '__main__':
 
     ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat').to(device)
 
+    lambdas = train.Lambdas(
+        u=0.01,
+        v=100.0,
+        n=100.0,
+        w=1.0,
+    )
+
     cdl = CollaborativeDeepLearning(
         in_features=content_training_dataset.shape[1],
         num_users=ratings_training_dataset.shape[0],
@@ -31,10 +38,6 @@ if __name__ == '__main__':
         layer_sizes=[200, 50],
         corruption=0.3,
         dropout=0.0,
-        lambda_u=0.01,
-        lambda_v=100.0,
-        lambda_n=100.0,
-        lambda_w=1.0,
     ).to(device)
 
     conf = (1, 0.01)
@@ -47,9 +50,9 @@ if __name__ == '__main__':
 
         loss = 0
         for param in cdl.sdae.parameters():
-            loss += (param * param).sum() * cdl.lambda_w / 2
+            loss += (param * param).sum() * lambdas.w / 2
 
-        loss += ((pred - actual) ** 2).sum() * cdl.lambda_n / 2
+        loss += ((pred - actual) ** 2).sum() * lambdas.n / 2
         return loss
 
     optimizer = optim.Adam(cdl.parameters())
@@ -68,7 +71,8 @@ if __name__ == '__main__':
     print('sdae validation loss', sdae_loss(x, content_validation_dataset))
 
     cdl.sdae.train()
-    train_cdl(cdl, content_dataset, ratings_training_dataset, optimizer, conf=(1, 0.01), epochs=10, batch_size=60)
+    dataset = train.Dataset(content_dataset, ratings_training_dataset)
+    train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=10, batch_size=60)
     torch.save(cdl.state_dict(), 'cdl.pt')
 
     ratings_pred = cdl.U @ cdl.V.t()

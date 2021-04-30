@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 import torch
 import torch.cuda
 from torch import linalg
@@ -5,23 +7,27 @@ from torch import autograd
 from torch.utils.data import DataLoader
 
 
-def train_cdl(cdl, content_dataset, ratings_matrix, optimizer, conf, epochs, batch_size):
-    confidence_matrix = ratings_matrix * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings_matrix)
+Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
+Dataset = namedtuple('Dataset', ['content', 'ratings'])
+
+
+def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size):
+    confidence_matrix = dataset.ratings * (conf[0] - conf[1]) + conf[1] * torch.ones_like(dataset.ratings)
 
     with autograd.no_grad():
-        encoded_dataset = cdl.sdae.encode(content_dataset)
+        encoded_dataset = cdl.sdae.encode(dataset.content)
 
     def cdl_loss(cdl_out, actual):
         reconstruction, ratings_pred = cdl_out
 
         loss = 0
         for param in cdl.sdae.parameters():
-            loss += (param ** 2).sum() * cdl.lambda_w / 2
+            loss += (param ** 2).sum() * lambdas.w / 2
 
-        loss += ((reconstruction - actual) ** 2).sum() * cdl.lambda_n / 2
-        loss += (cdl.U ** 2).sum() * cdl.lambda_u / 2
-        loss += ((cdl.V - encoded_dataset) ** 2).sum() * cdl.lambda_v / 2
-        loss += (confidence_matrix * (ratings_matrix - ratings_pred) ** 2).sum() / 2
+        loss += ((reconstruction - actual) ** 2).sum() * lambdas.n / 2
+        loss += (cdl.U ** 2).sum() * lambdas.u / 2
+        loss += ((cdl.V - encoded_dataset) ** 2).sum() * lambdas.v / 2
+        loss += (confidence_matrix * (dataset.ratings - ratings_pred) ** 2).sum() / 2
 
         return loss
 
@@ -35,16 +41,16 @@ def train_cdl(cdl, content_dataset, ratings_matrix, optimizer, conf, epochs, bat
 
         with autograd.no_grad():
             print('  running coordinate ascent...')
-            coordinate_ascent(cdl, ratings_matrix, conf, encoded_dataset, num_iters)
+            coordinate_ascent(cdl, dataset.ratings, conf, lambdas, encoded_dataset)
 
         # The parameters U and V are not updated below since they have
         # require_grad=False.  However, their values will influence the loss
         # and therefore the gradients of the SDAE.
         print('  running gradient descent...')
-        train(cdl, content_dataset, batch_size, cdl_loss, optimizer)
+        train(cdl, dataset.content, batch_size, cdl_loss, optimizer)
 
 
-def coordinate_ascent(cdl, R, conf, enc, num_iters=1):
+def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
     """
     :param U: The latent users matrix of shape (num_users, latent_size).
     :param V: The latent items matrix of shape (num_items, latent_size).
@@ -61,11 +67,11 @@ def coordinate_ascent(cdl, R, conf, enc, num_iters=1):
     enc = enc.to('cpu')
 
     latent_size = U.shape[1]
-    idu = cdl.lambda_u * torch.eye(latent_size, device=R.device)
-    idv = cdl.lambda_v * torch.eye(latent_size, device=R.device)
+    idu = lambdas.u * torch.eye(latent_size, device=R.device)
+    idv = lambdas.v * torch.eye(latent_size, device=R.device)
     conf_a, conf_b = conf
 
-    scaled_enc = enc * cdl.lambda_v
+    scaled_enc = enc * lambdas.v
 
     for i in range(num_iters):
         VtV = conf_b * V.t() @ V

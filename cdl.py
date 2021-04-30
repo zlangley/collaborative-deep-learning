@@ -14,10 +14,6 @@ class CollaborativeDeepLearning(nn.Module):
             layer_sizes,
             corruption,
             dropout,
-            lambda_u,
-            lambda_v,
-            lambda_n,
-            lambda_w,
     ):
         super().__init__()
 
@@ -30,11 +26,6 @@ class CollaborativeDeepLearning(nn.Module):
         self.V = nn.Parameter(torch.Tensor(num_items, latent_size), requires_grad=False)
         nn.init.xavier_uniform_(self.U)
         nn.init.xavier_uniform_(self.V)
-
-        self.lambda_u = lambda_u
-        self.lambda_v = lambda_v
-        self.lambda_n = lambda_n
-        self.lambda_w = lambda_w
 
     def forward(self, x):
         reconstruction = self.sdae(x)
