@@ -112,7 +112,7 @@ if __name__ == '__main__':
 
         pred = cdl.predict()
 
-        _, indices = torch.sort(pred, dim=1)
+        _, indices = torch.sort(pred, dim=1, descending=True)
         top = indices[:, :args.recall]
 
         gathered = ratings_test_dataset.gather(1, top)
