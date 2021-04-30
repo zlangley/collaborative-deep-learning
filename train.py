@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 
+#torch.autograd.set_detect_anomaly(True)
+
 
 def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
     logging.info('Beginning CDL training')
@@ -19,22 +21,20 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
         # These matrices are instead updated manually with the coordinate ascent algorithm.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
-        # Don't use dropout here.
-        cdl.sdae.eval()
-        encoded = cdl.sdae.encode(dataset.content)
-        cdl.sdae.train()
-
-        # TODO: We should probably still use batches?
-        loss = cdl_loss(cdl, dataset.content, dataset.ratings, encoded, conf, lambdas, device=device)
-        logging.info(f'  current loss: {loss:>7f}')
+        def loss_fn(content_pred, content_actual, batch):
+            latent_items = cdl.V[batch*batch_size:(batch+1)*batch_size]
+            return cdl_loss(cdl, content_pred, content_actual, dataset.ratings, conf, lambdas, latent_items, device=device)
 
         # Update SDAE weights.
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        train(cdl.sdae, dataset.content, batch_size, loss_fn, optimizer)
 
         # Update U and V manually with coordinate ascent.
         with autograd.no_grad():
+            # Don't use dropout here.
+            cdl.sdae.eval()
+            encoded = cdl.sdae.encode(dataset.content)
+            cdl.sdae.train()
+
             coordinate_ascent(cdl, dataset.ratings, conf, lambdas, encoded.cpu())
 
 
@@ -129,7 +129,7 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
 
     for batch, X_b in enumerate(dataloader):
         pred = model(X_b)
-        loss = loss_fn(pred, X_b)
+        loss = loss_fn(pred, X_b, batch)
 
         optimizer.zero_grad()
         loss.backward()
@@ -141,11 +141,14 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
 
 
 def sdae_loss(sdae, lambdas):
-    def _sdae_loss(pred, actual):
+    def _sdae_loss(pred, actual, _):
         # pred = torch.clamp(pred, min=1e-16)
         # actual = torch.clamp(actual, min=1e-16)
         # cross_entropies = -(actual * torch.log(pred) + (1 - actual) * torch.log(1 - pred)).sum(dim=1)
         # return cross_entropies.mean()
+
+        # First parameter is encoding, second is reconstruction.
+        _, pred = pred
 
         loss = 0
         for param in sdae.parameters():
@@ -157,21 +160,22 @@ def sdae_loss(sdae, lambdas):
     return _sdae_loss
 
 
-def cdl_loss(cdl, content, ratings, encoded, conf, lambdas, device='cpu'):
+def cdl_loss(cdl, sdae_pred, content_actual, ratings, conf, lambdas, latent_items, device='cpu'):
+    encoding, content_pred = sdae_pred
+
     cdl.U.data = cdl.U.data.to(device)
     cdl.V.data = cdl.V.data.to(device)
     ratings = ratings.to(device)
 
-    content_pred = cdl.sdae(content)
     ratings_pred = cdl.predict().to(device)
 
     conf_matrix = ratings * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings)
 
     loss = 0
-    loss += sdae_loss(cdl.sdae, lambdas)(content_pred, content)
+    loss += sdae_loss(cdl.sdae, lambdas)(sdae_pred, content_actual, None)
     loss += (cdl.U ** 2).sum() * lambdas.u / 2
     loss += (conf_matrix * (ratings - ratings_pred) ** 2).sum() / 2
-    loss += ((cdl.V - encoded) ** 2).sum() * lambdas.v / 2
+    loss += ((latent_items - encoding) ** 2).sum() * lambdas.v / 2
 
     cdl.U.data = cdl.U.data.cpu()
     cdl.V.data = cdl.V.data.cpu()

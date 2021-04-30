@@ -17,22 +17,26 @@ class StackedDenoisingAutoencoder(nn.Module):
     # TODO: other initialization?
 
     def forward(self, x):
-        x = self.encode(x)
+        z = self.encode(x)
+        x = F.dropout(z, self._dropout)
         x = self.decode(x)
-        return x
+        return z, x
 
     def encode(self, x):
-        for autoencoder in self.autoencoders:
+        for autoencoder in self.autoencoders[:-1]:
             x = autoencoder.encode(x)
             x = F.dropout(x, self._dropout)
+
+        x = self.autoencoders[-1].encode(x)
 
         return x
 
     def decode(self, x):
-        for i, autoencoder in enumerate(reversed(self.autoencoders)):
+        for autoencoder in reversed(self.autoencoders[1:]):
             x = autoencoder.decode(x)
-            if i != len(self.autoencoders) - 1:
-                x = F.dropout(x, self._dropout)
+            x = F.dropout(x, self._dropout)
+
+        x = self.autoencoders[0].decode(x)
 
         return x
 
@@ -62,10 +66,10 @@ class DenoisingAutoencoder(nn.Module):
 
     def forward(self, x):
         x = F.dropout(x, self._corruption)
-        x = self.encode(x)
-        x = self._dropout(x)
+        z = self.encode(x)
+        x = self._dropout(z)
         x = self.decode(x)
-        return x
+        return z, x
 
     def encode(self, x):
         x = self._encoder(x)

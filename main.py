@@ -6,6 +6,7 @@ import torch
 import torch.optim as optim
 
 import data
+import evaluate
 import train
 from cdl import CollaborativeDeepLearning
 from train import train_sdae, train_cdl
@@ -132,12 +133,9 @@ if __name__ == '__main__':
         pred = cdl.predict()
 
         logging.info(f'Calculating recall@{args.recall}')
-        _, indices = torch.sort(pred, dim=1, descending=True)
-        top = indices[:, :args.recall]
 
-        gathered = ratings_test_dataset.gather(1, top)
-        recall = gathered.sum(dim=1) / ratings_test_dataset.sum(dim=1)
+        recall = evaluate.recall(pred, ratings_test_dataset, args.recall)
 
-        print(f'recall@{args.recall}: {recall.mean().item()}')
+        print(f'recall@{args.recall}: {recall.item()}')
 
     logging.info(f'Complete')
