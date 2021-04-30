@@ -71,7 +71,7 @@ if __name__ == '__main__':
     if args.command == 'train_sdae':
         save_path = args.sdae_out
 
-        content_dataset.to(device)
+        content_dataset = content_dataset.to(device)
         cdl.sdae.to(device)
 
         train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=20, batch_size=60)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         state_dict = torch.load(load_path)
         cdl.sdae.load_state_dict(state_dict)
 
-        content_dataset.to(device)
+        content_dataset = content_dataset.to(device)
         cdl.sdae.to(device)
 
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
