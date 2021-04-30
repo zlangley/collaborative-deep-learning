@@ -18,11 +18,7 @@ class StackedDenoisingAutoencoder(nn.Module):
 
     def forward(self, x):
         x = self.encode(x)
-
-        for autoencoder in reversed(self.autoencoders):
-            x = F.dropout(x, self._dropout)
-            x = autoencoder.decode(x)
-
+        x = self.decode(x)
         return x
 
     def encode(self, x):
@@ -30,6 +26,14 @@ class StackedDenoisingAutoencoder(nn.Module):
             if self.training and i != 0:
                 x = F.dropout(x, self._dropout)
             x = autoencoder.encode(x)
+
+        return x
+
+    def decode(self, x):
+        for autoencoder in reversed(self.autoencoders):
+            if self.training:
+                x = F.dropout(x, self._dropout)
+            x = autoencoder.decode(x)
 
         return x
 

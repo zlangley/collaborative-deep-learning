@@ -15,6 +15,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     device = args.device or 'cpu'
+    # Note: SDAE inputs and parameters will use the GPU if desired, but U and V
+    # matrices of CDL do not go on the GPU (and therefore nor does the ratings
+    # matrix).
 
     content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat').to(device)
     # dataset.shape: (16980, 8000)
@@ -25,7 +28,7 @@ if __name__ == '__main__':
     content_training_dataset = content_dataset[:15282]
     content_validation_dataset = content_dataset[:15282]
 
-    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat').to(device)
+    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat')
 
     lambdas = train.Lambdas(
         u=0.01,
@@ -41,9 +44,11 @@ if __name__ == '__main__':
         layer_sizes=[200, 50],
         corruption=0.3,
         dropout=0.0,
-    ).to(device)
+    )
+    # Only move the SDAE.
+    cdl.sdae.to(device)
 
-    optimizer = optim.Adam(cdl.parameters(), lr=5e-3)
+    optimizer = optim.Adam(cdl.parameters(), lr=1e-3)
 
     load_pretrain = True
     if load_pretrain:
@@ -63,7 +68,7 @@ if __name__ == '__main__':
 
     cdl.sdae.train()
     dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-    train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=20, batch_size=60)
+    train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=20, batch_size=60, device=device)
     torch.save(cdl.state_dict(), 'cdl.pt')
 
     ratings_pred = cdl.U @ cdl.V.t()

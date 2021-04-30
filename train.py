@@ -10,29 +10,32 @@ from torch.utils.data import DataLoader
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 
 
-def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size):
-    with autograd.no_grad():
-        encoded_dataset = cdl.sdae.encode(dataset.content)
-
-    loss = cdl_loss(cdl, conf, lambdas)
-
+def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
     print('Training CDL')
     for epoch in range(epochs):
         print('Epoch', epoch + 1)
 
-        # Each epoch is one iteration of coordinate ascent (for U and V)
-        # followed by one iteration of gradient descent (for the SDAE
-        # parameters).
-
-        with autograd.no_grad():
-            print('  running coordinate ascent...')
-            coordinate_ascent(cdl, dataset.ratings, conf, lambdas, encoded_dataset)
+        # Each epoch is one iteration of gradient descent (for the SDAE)
+        # followed by one iteration of coordinate ascent (for U and V).
 
         # The parameters U and V are not updated below since they have
         # require_grad=False.  However, their values will influence the loss
         # and therefore the gradients of the SDAE.
-        print('  running gradient descent...')
-        train(cdl, dataset, batch_size, loss, optimizer)
+#        print('  fine-tuning SDAE...')
+#        train(cdl, dataset.content, batch_size, sdae_loss(cdl.sdae, lambdas), optimizer)
+
+        encoded = cdl.sdae.encode(dataset.content)
+        loss = cdl_loss(cdl, dataset.content, dataset.ratings, encoded, conf, lambdas, device=device)
+        print(f'  loss: {loss:>7f}')
+
+        # Update SDAE weights.
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Update U and V manually with coordinate ascent.
+        with autograd.no_grad():
+            coordinate_ascent(cdl, dataset.ratings, conf, lambdas, encoded.cpu())
 
 
 class ContentRatingsDataset:
@@ -41,13 +44,6 @@ class ContentRatingsDataset:
         # ratings.shape: (num_users, num_items)
         self.content = content
         self.ratings = ratings
-
-    def __getitem__(self, item):
-        # Used for gradient descent training; ith training item expects entire rating matrix for loss.
-        return self.content[item], self.ratings
-
-    def __len__(self):
-        return len(self.content)
 
 
 def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
@@ -58,17 +54,12 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
     :param C: The confidence matrix of shape (num_users, num_items).
     :param enc: The encodings of the content of shape (num_items, latent_size).
     """
-    # Because of the iterations below, coordinate ascent is much faster on the CPU.
-    orig_device = cdl.U.device
-
-    V = cdl.V.data.to('cpu')
-    U = cdl.U.data.to('cpu')
-    R = R.to('cpu')
-    enc = enc.to('cpu')
+    U = cdl.U
+    V = cdl.V
 
     latent_size = U.shape[1]
-    idu = lambdas.u * torch.eye(latent_size, device=R.device)
-    idv = lambdas.v * torch.eye(latent_size, device=R.device)
+    idu = lambdas.u * torch.eye(latent_size)
+    idv = lambdas.v * torch.eye(latent_size)
     conf_a, conf_b = conf
 
     scaled_enc = enc * lambdas.v
@@ -100,9 +91,6 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
             #A = UC @ U + idv
             #b = UC @ R[:, j] + scaled_enc[j]
             V[j] = linalg.solve(A, b)
-
-    cdl.V.data = V.to(orig_device)
-    cdl.U.data = U.to(orig_device)
 
 
 def train_sdae(sdae, dataset, loss_fn, optimizer, epochs, batch_size):
@@ -159,19 +147,23 @@ def sdae_loss(sdae, lambdas):
     return _sdae_loss
 
 
-def cdl_loss(cdl, conf, lambdas):
-    def _cdl_loss(pred, actual):
-        content_pred, ratings_pred = pred
-        content_actual, ratings_actual = actual
+def cdl_loss(cdl, content, ratings, encoded, conf, lambdas, device='cpu'):
+    cdl.U.data = cdl.U.data.to(device)
+    cdl.V.data = cdl.V.data.to(device)
+    ratings = ratings.to(device)
 
-        confidence_matrix = ratings_actual * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings_actual)
+    content_pred = cdl.sdae.decode(encoded)
+    ratings_pred = cdl.predict().to(device)
 
-        loss = 0
-        loss += sdae_loss(cdl.sdae, lambdas)(content_pred, content_actual)
-        loss += (cdl.U ** 2).sum() * lambdas.u / 2
-        loss += ((cdl.V - encoded_dataset) ** 2).sum() * lambdas.v / 2
-        loss += (confidence_matrix * (ratings_actual - ratings_pred) ** 2).sum() / 2
+    conf_matrix = ratings * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings)
 
-        return loss
+    loss = 0
+    loss += sdae_loss(cdl.sdae, lambdas)(content_pred, content)
+    loss += (cdl.U ** 2).sum() * lambdas.u / 2
+    loss += (conf_matrix * (ratings - ratings_pred) ** 2).sum() / 2
+    loss += ((cdl.V - encoded) ** 2).sum() * lambdas.v / 2
 
-    return _cdl_loss
+    cdl.U.data = cdl.U.data.cpu()
+    cdl.V.data = cdl.V.data.cpu()
+
+    return loss

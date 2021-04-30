@@ -19,9 +19,5 @@ class CollaborativeDeepLearning(nn.Module):
         nn.init.xavier_uniform_(self.U)
         nn.init.xavier_uniform_(self.V)
 
-    def forward(self, x):
-        # Second input is the ratings matrix; ignore it.
-        x, _ = x
-        reconstruction = self.sdae(x)
-        ratings_pred = self.U @ self.V.t()
-        return reconstruction, ratings_pred
+    def predict(self):
+        return self.U @ self.V.t()
