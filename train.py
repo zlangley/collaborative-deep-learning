@@ -65,31 +65,41 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc, num_iters=1):
     scaled_enc = enc * lambdas.v
 
     for i in range(num_iters):
-        VtV = conf_b * V.t() @ V
+        # We compute Vt @ Ci @ V with the following optimization. Recall
+        # that Ci = diag(C_i1, ..., C_iJ) where C_ij is a if R_ij = 1 and
+        # b otherwise. So we have
+        #
+        #   Vt @ Ci @ V = Vt @ diag((a - b) * Ri + b * ones) @ V
+        #             = (a - b) Vt @ diag(Ri) @ V + b * Vt @ V
+        #
+        # Notice that since Ri is a zero-one matrix, diag(Ri) simply kills
+        # the items of V that user i has does not have in her library; indeed,
+        #                Vt @ diag(Ri) @ V = Wt @ Wr,
+        # where W is the submatrix restricted to rows j with R_ij != 0.
+        # Since W will be *much* smaller than V, it is much more efficient to
+        # first extract this submatrix.
+
+        A_base = conf_b * V.t() @ V + idu
         for j in range(len(U)):
             rated_idx = R[j].nonzero().squeeze(1)
-            Vr = V[rated_idx, :]
-            A = VtV + (conf_a - conf_b) * Vr.t() @ Vr + idu
-            b = Vr.t() @ R[j, rated_idx]
-#            VC = V.t() * C[j]
-#            A = VC @ V + idu
-#            b = VC @ R[j]
+            W = V[rated_idx, :]
+            A = (conf_a - conf_b) * W.t() @ W + A_base
+            b = W.t() @ R[j, rated_idx]
+
             U[j] = linalg.solve(A, b)
 
-        UtU = conf_b * U.t() @ U
+        # The same logic above applies to the users matrix.
+        A_base = conf_b * U.t() @ U + idv
         for j in range(len(V)):
-            A = UtU + idv
-            b = scaled_enc[j]
-
             rated_idx = R[:, j].nonzero().squeeze(1)
-            if len(rated_idx):
-                Ur = U[rated_idx, :]
-                A += (conf_a - conf_b) * Ur.t() @ Ur
-                b += Ur.t() @ R[rated_idx, j]
+            if len(rated_idx) == 0:
+                A = A_base
+                b = scaled_enc[j]
+            else:
+                W = U[rated_idx, :]
+                A = (conf_a - conf_b) * W.t() @ W + A_base
+                b = W.t() @ R[rated_idx, j] + scaled_enc[j]
 
-            #UC = cdl.U.t() * C[:, j]
-            #A = UC @ U + idv
-            #b = UC @ R[:, j] + scaled_enc[j]
             V[j] = linalg.solve(A, b)
 
 
