@@ -88,7 +88,7 @@ def coordinate_ascent(cdl, R, C, enc, num_iters):
 
 
 def train_sdae(sdae, dataset, loss_fn, optimizer, epochs, batch_size):
-    cur_input = dataset.to('cuda:3')
+    cur_input = dataset
 
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
@@ -112,7 +112,6 @@ def train(model, dataset, batch_size, loss_fn, optimizer):
     size = len(dataloader.dataset)
 
     for batch, X_b in enumerate(dataloader):
-        X_b = X_b.to('cuda:3')
         pred = model(X_b)
         loss = loss_fn(pred, X_b)
 
