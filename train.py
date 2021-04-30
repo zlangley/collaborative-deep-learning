@@ -19,7 +19,10 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
         # These matrices are instead updated manually with the coordinate ascent algorithm.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
+        # Don't use dropout here.
+        cdl.sdae.eval()
         encoded = cdl.sdae.encode(dataset.content)
+        cdl.sdae.train()
 
         # TODO: We should probably still use batches?
         loss = cdl_loss(cdl, dataset.content, dataset.ratings, encoded, conf, lambdas, device=device)
@@ -159,7 +162,7 @@ def cdl_loss(cdl, content, ratings, encoded, conf, lambdas, device='cpu'):
     cdl.V.data = cdl.V.data.to(device)
     ratings = ratings.to(device)
 
-    content_pred = cdl.sdae.decode(encoded)
+    content_pred = cdl.sdae(content)
     ratings_pred = cdl.predict().to(device)
 
     conf_matrix = ratings * (conf[0] - conf[1]) + conf[1] * torch.ones_like(ratings)
