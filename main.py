@@ -15,11 +15,28 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command')
     parser.add_argument('--device', default='cpu')
+
     parser.add_argument('--sdae_in', default='sdae.pt')
     parser.add_argument('--sdae_out', default='sdae.pt')
     parser.add_argument('--cdl_in', default='cdl.pt')
     parser.add_argument('--cdl_out', default='cdl.pt')
+
     parser.add_argument('--recall', type=int, default=300)
+
+    parser.add_argument('--conf_a', type=float, default=1.0)
+    parser.add_argument('--conf_b', type=float, default=0.01)
+
+    parser.add_argument('--lambda_u', type=float, default=0.01)
+    parser.add_argument('--lambda_v', type=float, default=100.0)
+    parser.add_argument('--lambda_n', type=float, default=100.0)
+    parser.add_argument('--lambda_w', type=float, default=1.0)
+
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=60)
+    parser.add_argument('--dropout', type=float, default=0.2)
+    parser.add_argument('--corruption', type=float, default=0.3)
+
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -51,10 +68,10 @@ if __name__ == '__main__':
     ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat')
 
     lambdas = train.Lambdas(
-        u=0.01,
-        v=100.0,
-        n=100.0,
-        w=1.0,
+        u=args.lambda_u,
+        v=args.lambda_v,
+        n=args.lambda_n,
+        w=args.lambda_w,
     )
 
     cdl = CollaborativeDeepLearning(
@@ -62,12 +79,12 @@ if __name__ == '__main__':
         num_users=ratings_training_dataset.shape[0],
         num_items=ratings_training_dataset.shape[1],
         layer_sizes=[200, 50],
-        corruption=0.3,
-        dropout=0.0,
+        corruption=args.corruption,
+        dropout=args.dropout,
     )
 
     sdae_loss = train.sdae_loss(cdl.sdae, lambdas)
-    optimizer = optim.Adam(cdl.parameters(), lr=1e-3)
+    optimizer = optim.Adam(cdl.parameters(), lr=args.lr)
 
     if args.command == 'train_sdae':
         save_path = args.sdae_out
@@ -75,7 +92,7 @@ if __name__ == '__main__':
         cdl.sdae.to(device)
 
         logging.info(f'Training SDAE')
-        train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=20, batch_size=60)
+        train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=args.epochs, batch_size=args.batch_size)
 
         cdl.sdae.cpu()
 
@@ -92,7 +109,7 @@ if __name__ == '__main__':
 
         logging.info(f'Training CDL')
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-        train_cdl(cdl, dataset, optimizer, conf=(1, 0.01), lambdas=lambdas, epochs=20, batch_size=60, device=device)
+        train_cdl(cdl, dataset, optimizer, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         cdl.sdae.cpu()
 
