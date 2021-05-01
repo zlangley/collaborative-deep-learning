@@ -66,9 +66,10 @@ class DenoisingAutoencoder(nn.Module):
 
     def forward(self, x):
         x = F.dropout(x, self._corruption)
-        z = self.encode(x)
-        x = self._dropout(z)
-        x = self.decode(x)
+        z = self._encoder(x)
+        x = torch.sigmoid(z)
+        x = self._dropout(x)
+        x = self._decoder(x)
         return z, x
 
     def encode(self, x):

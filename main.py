@@ -78,7 +78,7 @@ if __name__ == '__main__':
         in_features=content_training_dataset.shape[1],
         num_users=ratings_training_dataset.shape[0],
         num_items=ratings_training_dataset.shape[1],
-        layer_sizes=[100, 50],
+        layer_sizes=[200, 50],
         corruption=args.corruption,
         dropout=args.dropout,
     )

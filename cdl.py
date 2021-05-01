@@ -16,8 +16,9 @@ class CollaborativeDeepLearning(nn.Module):
         # Not parameters; we train these manually with coordinate descent.
         self.U = nn.Parameter(torch.Tensor(num_users, latent_size), requires_grad=False)
         self.V = nn.Parameter(torch.Tensor(num_items, latent_size), requires_grad=False)
-        nn.init.xavier_uniform_(self.U)
-        nn.init.xavier_uniform_(self.V)
+
+        nn.init.uniform_(self.U, 0, 0.1)
+        nn.init.uniform_(self.V, 0, 0.1)
 
     def predict(self):
         return self.U @ self.V.t()

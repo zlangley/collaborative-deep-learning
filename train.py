@@ -7,11 +7,26 @@ from torch import linalg
 from torch import autograd
 from torch.utils.data import DataLoader
 
+import data
+import evaluate
+
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 
+ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', 16980)
+ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', 16980)
 
 def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
+    with autograd.no_grad():
+        cdl.V.data = cdl.sdae.encode(dataset.content).cpu()
+
+    pred = cdl.predict()
+    recall = evaluate.recall(pred, ratings_training_dataset, 300)
+    print(f'  training recall@300: {recall}')
+
+    recall = evaluate.recall(pred, ratings_test_dataset, 300)
+    print(f'  test recall@300: {recall}')
+
     logging.info('Beginning CDL training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
@@ -46,12 +61,25 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
             encoding, reconstruction = cdl.sdae(dataset.content)
             conf_mat = (conf[0] - conf[1]) * ratings + conf[1] * torch.ones_like(ratings)
 
-            likelihood = 0
-            likelihood -= sdae_pure_loss(cdl.sdae, lambdas)(reconstruction, dataset.content)
-            likelihood -= (cdl.V.to(device) - encoding).square().sum(dim=1).mean() * lambdas.v
-            likelihood -= cdl.U.to(device).square().sum() * lambdas.u
-            likelihood -= (conf_mat * (ratings - cdl.predict().to(device))).square().sum(dim=1).mean()
-            logging.info(f'  likelihood: {likelihood}')
+            pred = cdl.predict()
+
+            likelihood_w = 0
+            for param in cdl.sdae.parameters():
+                likelihood_w -= (param * param).sum() * lambdas.w / 2
+
+            likelihood_n = -(reconstruction - dataset.content).square().sum() * lambdas.n / 2
+            likelihood_v = -(cdl.V.to(device) - encoding).square().sum() * lambdas.v / 2
+            likelihood_u = -cdl.U.square().sum() * lambdas.u / 2
+            likelihood_r = -(conf_mat * (ratings - pred.to(device))).square().sum() / 2
+
+            likelihood = likelihood_w + likelihood_n + likelihood_v + likelihood_u + likelihood_r
+            logging.info(f'  neg_likelihood={-likelihood:>5f} w={-likelihood_w:>5f} n={-likelihood_n:>5f} v={-likelihood_v:>5f} u={-likelihood_u:>5f} r={-likelihood_r:>5f}')
+
+            recall = evaluate.recall(pred, ratings_training_dataset, 300)
+            print(f'  training recall@300: {recall}')
+
+            recall = evaluate.recall(pred, ratings_test_dataset, 300)
+            print(f'  test recall@300: {recall}')
 
             cdl.sdae.train()
 
@@ -85,7 +113,7 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
     # b otherwise. So we have
     #
     #   Vt @ Ci @ V = Vt @ diag((a - b) * Ri + b * ones) @ V
-    #             = (a - b) Vt @ diag(Ri) @ V + b * Vt @ V
+    #               = (a - b) Vt @ diag(Ri) @ V + b * Vt @ V
     #
     # Notice that since Ri is a zero-one matrix, diag(Ri) simply kills
     # the items of V that user i has does not have in her library; indeed,
@@ -105,7 +133,7 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
         U[j] = linalg.solve(A, b)
 
     # The same logic above applies to the users matrix.
-    A_base = conf_b * U.t() @ U + + lambdas.v * torch.eye(latent_size)
+    A_base = conf_b * U.t() @ U + lambdas.v * torch.eye(latent_size)
     for j in range(len(V)):
         rated_idx = R[:, j].nonzero().squeeze(1)
         if len(rated_idx) == 0:
