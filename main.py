@@ -28,14 +28,14 @@ if __name__ == '__main__':
     parser.add_argument('--conf_a', type=float, default=1.0)
     parser.add_argument('--conf_b', type=float, default=0.01)
 
-    parser.add_argument('--lambda_u', type=float, default=0.01)
-    parser.add_argument('--lambda_v', type=float, default=100.0)
-    parser.add_argument('--lambda_n', type=float, default=100.0)
-    parser.add_argument('--lambda_w', type=float, default=2.0)
+    parser.add_argument('--lambda_u', type=float, default=0.1)
+    parser.add_argument('--lambda_v', type=float, default=10.0)
+    parser.add_argument('--lambda_n', type=float, default=1.0)
+    parser.add_argument('--lambda_w', type=float, default=1.0)
 
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--batch_size', type=int, default=60)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--dropout', type=float, default=0.2)
     parser.add_argument('--corruption', type=float, default=0.3)
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
         in_features=content_training_dataset.shape[1],
         num_users=ratings_training_dataset.shape[0],
         num_items=ratings_training_dataset.shape[1],
-        layer_sizes=[200, 50],
+        layer_sizes=[100, 50],
         corruption=args.corruption,
         dropout=args.dropout,
     )
