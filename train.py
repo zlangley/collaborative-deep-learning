@@ -19,7 +19,7 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
         # These matrices are instead updated manually with the coordinate ascent algorithm.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
-        sdae_dataset = list(zip(dataset.content, cdl.V))
+        sdae_dataset = list(zip(dataset.content, cdl.V.to(device)))
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
         def loss_fn(sdae_out, items_latent_items):
