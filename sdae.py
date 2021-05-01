@@ -14,18 +14,13 @@ class StackedDenoisingAutoencoder(nn.Module):
         self.encode = nn.Sequential(*[autoencoder.encode for autoencoder in self.autoencoders])
         self.decode = nn.Sequential(*[autoencoder.decode for autoencoder in reversed(self.autoencoders)])
 
+        self.weights = [ae.weight for ae in self.autoencoders]
+        self.biases = [bias for ae in self.autoencoders for bias in ae.biases]
+
     def forward(self, x):
         latent = self.encode(x)
         reconstructed = self.decode(latent)
         return latent, reconstructed
-
-    @property
-    def weights(self):
-        return [ae.weight for ae in self.autoencoders]
-
-    @property
-    def biases(self):
-        return [bias for ae in self.autoencoders for bias in ae.bias]
 
 
 class DenoisingAutoencoder(nn.Module):

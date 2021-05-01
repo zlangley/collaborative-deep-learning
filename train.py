@@ -18,14 +18,8 @@ ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat',
 
 def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
     with autograd.no_grad():
+        # Initialize V to agree with the encodings.
         cdl.V.data = cdl.sdae.encode(dataset.content).cpu()
-
-    pred = cdl.predict()
-    recall = evaluate.recall(pred, ratings_training_dataset, 300)
-    print(f'  training recall@300: {recall}')
-
-    recall = evaluate.recall(pred, ratings_test_dataset, 300)
-    print(f'  test recall@300: {recall}')
 
     logging.info('Beginning CDL training')
     for epoch in range(epochs):
@@ -64,13 +58,13 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
             pred = cdl.predict()
 
             likelihood_w = 0
-            for param in cdl.sdae.parameters():
-                likelihood_w -= (param * param).sum() * lambdas.w / 2
+            likelihood_w -= sum(weight.square().sum() for weight in cdl.sdae.weights) * lambdas.w / 2
+            likelihood_w -= sum(bias.square().sum() for bias in cdl.sdae.biases) * lambdas.w / 2
 
             likelihood_n = -(reconstruction - dataset.content).square().sum() * lambdas.n / 2
             likelihood_v = -(cdl.V.to(device) - encoding).square().sum() * lambdas.v / 2
             likelihood_u = -cdl.U.square().sum() * lambdas.u / 2
-            likelihood_r = -(conf_mat * (ratings - pred.to(device))).square().sum() / 2
+            likelihood_r = -(conf_mat * (ratings - pred.to(device)).square()).sum() / 2
 
             likelihood = likelihood_w + likelihood_n + likelihood_v + likelihood_u + likelihood_r
             logging.info(f'  neg_likelihood={-likelihood:>5f} w={-likelihood_w:>5f} n={-likelihood_n:>5f} v={-likelihood_v:>5f} u={-likelihood_u:>5f} r={-likelihood_r:>5f}')
