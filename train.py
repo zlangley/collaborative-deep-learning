@@ -76,11 +76,9 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
     V = cdl.V
 
     latent_size = U.shape[1]
-    idu = lambdas.u * torch.eye(latent_size)
-    idv = lambdas.v * torch.eye(latent_size)
     conf_a, conf_b = conf
 
-    scaled_enc = enc * lambdas.v
+    lv_enc = enc * lambdas.v
 
     # We compute Vt @ Ci @ V with the following optimization. Recall
     # that Ci = diag(C_i1, ..., C_iJ) where C_ij is a if R_ij = 1 and
@@ -96,26 +94,28 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
     # Since W will be *much* smaller than V, it is much more efficient to
     # first extract this submatrix.
 
-    A_base = conf_b * V.t() @ V + idu
+    A_base = conf_b * V.t() @ V + lambdas.u * torch.eye(latent_size)
     for j in range(len(U)):
         rated_idx = R[j].nonzero().squeeze(1)
         W = V[rated_idx, :]
         A = (conf_a - conf_b) * W.t() @ W + A_base
-        b = W.t() @ R[j, rated_idx]
+        # R[j, rated_idx] is just an all-ones vector
+        b = conf_a * W.t().sum(dim=1)
 
         U[j] = linalg.solve(A, b)
 
     # The same logic above applies to the users matrix.
-    A_base = conf_b * U.t() @ U + idv
+    A_base = conf_b * U.t() @ U + + lambdas.v * torch.eye(latent_size)
     for j in range(len(V)):
         rated_idx = R[:, j].nonzero().squeeze(1)
         if len(rated_idx) == 0:
             A = A_base
-            b = scaled_enc[j]
+            b = lv_enc[j]
         else:
             W = U[rated_idx, :]
             A = (conf_a - conf_b) * W.t() @ W + A_base
-            b = W.t() @ R[rated_idx, j] + scaled_enc[j]
+            # R[rated_idx, j] is just an all-ones vector
+            b = conf_a * W.t().sum(dim=1) + lv_enc[j]
 
         V[j] = linalg.solve(A, b)
 
