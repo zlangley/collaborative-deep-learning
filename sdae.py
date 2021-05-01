@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class StackedDenoisingAutoencoder(nn.Module):
@@ -8,76 +6,58 @@ class StackedDenoisingAutoencoder(nn.Module):
         super().__init__()
 
         dims = zip([in_features] + layer_sizes[:-1], layer_sizes)
-        self.autoencoders = nn.ModuleList([
+        self.autoencoders = [
             DenoisingAutoencoder(rows, cols, corruption, dropout)
             for rows, cols in dims
-        ])
-        self._dropout = dropout
+        ]
 
-    # TODO: other initialization?
+        self.encode = nn.Sequential(*[autoencoder.encode for autoencoder in self.autoencoders])
+        self.decode = nn.Sequential(*[autoencoder.decode for autoencoder in reversed(self.autoencoders)])
 
     def forward(self, x):
-        z = self.encode(x)
-        x = F.dropout(z, self._dropout)
-        x = self.decode(x)
-        return z, x
+        latent = self.encode(x)
+        reconstructed = self.decode(latent)
+        return latent, reconstructed
 
-    def encode(self, x):
-        for autoencoder in self.autoencoders[:-1]:
-            x = autoencoder.encode(x)
-            x = F.dropout(x, self._dropout)
+    @property
+    def weights(self):
+        return [ae.weight for ae in self.autoencoders]
 
-        x = self.autoencoders[-1].encode(x)
-
-        return x
-
-    def decode(self, x):
-        for autoencoder in reversed(self.autoencoders[1:]):
-            x = autoencoder.decode(x)
-            x = F.dropout(x, self._dropout)
-
-        x = self.autoencoders[0].decode(x)
-
-        return x
+    @property
+    def biases(self):
+        return [bias for ae in self.autoencoders for bias in ae.bias]
 
 
 class DenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, encoding_size, corruption, dropout):
+    def __init__(self, in_features, latent_size, corruption, dropout):
         """
         Instantiates a DenoisingAutoencoder.
 
         :param in_features: The number of features (rows) of the input.
-        :param encoding_size: The size of the encoding.
-        :param corruption: The corruption probability for each element of the input.
+        :param latent_size: The size of the latent representation.
+        :param corruption: The probability of corrupting (zeroing) each element of the input.
         :param dropout: The dropout probability before decoding.
         """
         super().__init__()
 
-        self._encoder = nn.Linear(in_features, encoding_size)
-        self._dropout = nn.Dropout(dropout)
-        self._decoder = nn.Linear(encoding_size, in_features)
+        encode = nn.Linear(in_features, latent_size)
+        decode = nn.Linear(latent_size, in_features)
+        decode.weight.data = encode.weight.t()
 
-        self._corruption = corruption
+        self.weight = encode.weight
+        self.biases = [encode.bias.data, decode.bias.data]
 
-        # Tie weights.
-        self._decoder.weight = nn.Parameter(self._encoder.weight.t())
-
-        # TODO: xavier initialization in linear modules
+        self.encode = nn.Sequential(
+            nn.Dropout(corruption),
+            encode,
+            nn.Sigmoid(),
+        )
+        self.decode = nn.Sequential(
+            nn.Dropout(dropout),
+            decode,
+        )
 
     def forward(self, x):
-        x = F.dropout(x, self._corruption)
-        z = self._encoder(x)
-        x = torch.sigmoid(z)
-        x = self._dropout(x)
-        x = self._decoder(x)
-        return z, x
-
-    def encode(self, x):
-        x = self._encoder(x)
-        x = torch.sigmoid(x)
-        return x
-
-    def decode(self, x):
-        x = self._decoder(x)
-        #x = torch.sigmoid(x)
-        return x
+        latent = self.encode(x)
+        reconstructed = self.decode(latent)
+        return latent, reconstructed

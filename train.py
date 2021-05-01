@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 import data
 import evaluate
-
+from sdae import StackedDenoisingAutoencoder
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 
@@ -189,7 +189,7 @@ def train(forward, dataset, batch_size, loss_fn, optimizer):
             logging.info(f'  current loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
 
-def sdae_pure_loss(sdae, lambdas):
+def sdae_pure_loss(sdae: StackedDenoisingAutoencoder, lambdas):
     def _sdae_loss(pred, actual):
         # pred = torch.clamp(pred, min=1e-16)
         # actual = torch.clamp(actual, min=1e-16)
@@ -198,9 +198,8 @@ def sdae_pure_loss(sdae, lambdas):
 
         # First parameter is encoding, second is reconstruction.
         loss = 0
-        for param in sdae.parameters():
-            loss += (param * param).sum() * lambdas.w
-
+        loss += sum(weight.square().sum() for weight in sdae.weights) * lambdas.w
+        loss += sum(bias.square().sum() for bias in sdae.biases) * lambdas.w
         loss += (pred - actual).square().sum(dim=1).mean() * lambdas.n
         return loss
 
