@@ -28,7 +28,7 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
 
             loss = 0
             loss += sdae_pure_loss(cdl.sdae, lambdas)(reconstruction, items)
-            loss += (latent_items - encoding).square().sum(dim=1).mean() * lambdas.v / 2
+            loss += (latent_items - encoding).square().sum(dim=1).mean() * lambdas.v
             return loss
 
         train(lambda x: cdl.sdae(x[0]), sdae_dataset, batch_size, loss_fn, optimizer)
@@ -48,9 +48,9 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
 
             likelihood = 0
             likelihood -= sdae_pure_loss(cdl.sdae, lambdas)(reconstruction, dataset.content)
-            likelihood -= (cdl.V.to(device) - encoding).square().sum(dim=1).mean() * lambdas.v / 2
-            likelihood -= cdl.U.to(device).square().sum() * lambdas.u / 2
-            likelihood -= (conf_mat * (ratings - cdl.predict())).square().sum(dim=1).mean() / 2
+            likelihood -= (cdl.V.to(device) - encoding).square().sum(dim=1).mean() * lambdas.v
+            likelihood -= cdl.U.to(device).square().sum() * lambdas.u
+            likelihood -= (conf_mat * (ratings - cdl.predict().to(device))).square().sum(dim=1).mean()
             logging.info(f'  likelihood: {likelihood}')
 
             cdl.sdae.train()
@@ -120,9 +120,11 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
         V[j] = linalg.solve(A, b)
 
 
-def train_sdae(sdae, dataset, loss_fn, optimizer, epochs, batch_size):
+def train_sdae(sdae, dataset, lambdas, optimizer, epochs, batch_size):
     logging.info('Beginning CDL training')
     cur_input = dataset
+
+    loss_fn = lambda sdae_out, actual: (sdae_out[0] - actual).square().sum(dim=1).mean() * lambdas.n
 
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
@@ -169,9 +171,9 @@ def sdae_pure_loss(sdae, lambdas):
         # First parameter is encoding, second is reconstruction.
         loss = 0
         for param in sdae.parameters():
-            loss += (param * param).sum() * lambdas.w / 2
+            loss += (param * param).sum() * lambdas.w
 
-        loss += (pred - actual).square().sum(dim=1).mean() * lambdas.n / 2
+        loss += (pred - actual).square().sum(dim=1).mean() * lambdas.n
         return loss
 
     return _sdae_loss

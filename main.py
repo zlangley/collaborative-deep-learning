@@ -85,7 +85,6 @@ if __name__ == '__main__':
         dropout=args.dropout,
     )
 
-    sdae_loss = train.sdae_pure_loss(cdl.sdae, lambdas)
     optimizer = optim.Adam(cdl.parameters(), lr=args.lr)
 
     if args.command == 'train_sdae':
@@ -96,7 +95,7 @@ if __name__ == '__main__':
         cdl.sdae.to(device)
 
         logging.info(f'Training SDAE')
-        train_sdae(cdl.sdae, content_dataset, sdae_loss, optimizer, epochs=args.epochs, batch_size=args.batch_size)
+        train_sdae(cdl.sdae, content_dataset, lambdas, optimizer, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving SDAE model to {args.sdae_out}.')
         cdl.sdae.cpu()
