@@ -58,16 +58,14 @@ if __name__ == '__main__':
 
     logging.info('Loading dataset')
     content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat', map_location=device)
+    num_items = content_dataset.shape[0]
     # dataset.shape: (16980, 8000)
-
-    # FIXME: the ratings matrix only has 16970 items...
-    content_dataset = content_dataset[:16970]
 
     content_training_dataset = content_dataset[:15282]
     content_validation_dataset = content_dataset[:15282]
 
-    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat')
-    ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat')
+    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', num_items)
+    ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', num_items)
 
     lambdas = train.Lambdas(
         u=args.lambda_u,

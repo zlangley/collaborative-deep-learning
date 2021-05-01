@@ -38,17 +38,15 @@ def _parse_mult_dat_line(line):
     return bow, max_word_id
 
 
-def read_ratings(filename, map_location='cpu'):
+def read_ratings(filename, num_items, map_location='cpu'):
     adj = []
-    max_item_id = 0
 
     with open(filename) as f:
         for line in f:
             nums = [int(x) for x in line.split()[1:]]
-            max_item_id = max(max_item_id, max(nums))
             adj.append(nums)
 
-    R = torch.zeros((len(adj), max_item_id + 1), device=map_location)
+    R = torch.zeros((len(adj), num_items), device=map_location)
 
     # TODO: use torch.scatter?
     for u, vs in enumerate(adj):
