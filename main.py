@@ -85,7 +85,7 @@ if __name__ == '__main__':
         dropout=args.dropout,
     )
 
-    sdae_loss = train.sdae_loss(cdl.sdae, lambdas)
+    sdae_loss = train.sdae_pure_loss(cdl.sdae, lambdas)
     optimizer = optim.Adam(cdl.parameters(), lr=args.lr)
 
     if args.command == 'train_sdae':
