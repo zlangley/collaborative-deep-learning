@@ -29,6 +29,16 @@ def save_model(filename, sdae, mf):
     }, filename)
 
 
+def print_params(args):
+    logging.info(f'Parameters:')
+    logging.info(f'         a: {args.conf_a}')
+    logging.info(f'         b: {args.conf_b}')
+    logging.info(f'  lambda_u: {args.lambda_u}')
+    logging.info(f'  lambda_v: {args.lambda_v}')
+    logging.info(f'  lambda_w: {args.lambda_w}')
+    logging.info(f'  lambda_r: {args.lambda_r}')
+
+
 sdae_activations = {
     'relu': nn.ReLU(),
     'sigmoid': nn.Sigmoid(),
@@ -75,6 +85,7 @@ if __name__ == '__main__':
     parser.add_argument('--corruption', type=float, default=0.2)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
     parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
+    parser.add_argument('--no_tie_weights', action='store_true')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
@@ -113,6 +124,7 @@ if __name__ == '__main__':
         corruption=args.corruption,
         dropout=args.dropout,
         activation=sdae_activations[args.activation],
+        tie_weights=not args.no_tie_weights,
     )
     mf = MatrixFactorizationModel(
         target_shape=ratings_training_dataset.shape,
@@ -122,6 +134,8 @@ if __name__ == '__main__':
     optimizer = optim.Adam(sdae.parameters(), lr=args.lr)
 
     if args.command == 'pretrain_sdae':
+        print_params(args)
+
         if args.resume:
             logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
             sdae.load_state_dict(torch.load(args.sdae_in))
@@ -137,13 +151,7 @@ if __name__ == '__main__':
         torch.save(sdae.state_dict(), args.sdae_out)
 
     elif args.command == 'train':
-        logging.info(f'Parameters:')
-        logging.info(f'         a: {args.conf_a}')
-        logging.info(f'         b: {args.conf_b}')
-        logging.info(f'  lambda_u: {lambdas.u}')
-        logging.info(f'  lambda_v: {lambdas.v}')
-        logging.info(f'  lambda_w: {lambdas.w}')
-        logging.info(f'  lambda_r: {lambdas.r}')
+        print_params(args)
 
         if args.resume:
             logging.info(f'Loading pre-trained MF model from {args.cdl_in}')
