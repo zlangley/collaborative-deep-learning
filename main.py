@@ -129,7 +129,7 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-        loss_fn = recon_losses[args.recon_loss]
+        loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w)
         pretrain_sdae(sdae, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
@@ -156,7 +156,7 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = recon_losses[args.recon_loss]
+        recon_loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w)
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
         train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
