@@ -1,3 +1,5 @@
+import scipy.io
+
 import argparse
 import logging
 import sys
@@ -100,7 +102,8 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info('Loading dataset')
-    content_dataset = data.read_mult_dat('data/citeulike-a/mult.dat', map_location=device)
+    variables = scipy.io.loadmat("data/citeulike-a/mult_nor.mat")
+    content_dataset = torch.from_numpy(variables['X']).float().to(device)
     num_items = content_dataset.shape[0]
     # dataset.shape: (16980, 8000)
 
