@@ -1,7 +1,7 @@
 import torch
 
 
-def read_mult_dat(filename, map_location='cpu'):
+def read_mult_dat(filename, map_location=None):
     document_words = []
 
     max_id = 0
@@ -38,7 +38,7 @@ def _parse_mult_dat_line(line):
     return bow, max_word_id
 
 
-def read_ratings(filename, num_items, map_location='cpu'):
+def read_ratings(filename, num_items, map_location=None):
     adj = []
 
     with open(filename) as f:

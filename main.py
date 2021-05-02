@@ -14,8 +14,8 @@ from sdae import StackedDenoisingAutoencoder
 from train import pretrain_sdae, train_model
 
 
-def load_model(filename, sdae, mf):
-    checkpoint = torch.load(filename)
+def load_model(filename, sdae, mf, map_location=None):
+    checkpoint = torch.load(filename, map_location=map_location)
     sdae.load_state_dict(checkpoint['sdae'])
     mf.U = checkpoint['U']
     mf.V = checkpoint['V']
@@ -41,8 +41,8 @@ recon_losses = {
 }
 
 
-def regularize_sdae_loss(sdae, loss, lambda_w, lambda_n):
-    return lambda pred, actual: lambda_n * loss(pred, actual) + sdae.regularization_term(lambda_w)
+def regularize_sdae_loss(sdae, loss, lambda_w):
+    return lambda pred, actual: loss(pred, actual) + sdae.regularization_term(lambda_w)
 
 
 if __name__ == '__main__':
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_u', type=float, default=0.1)
     parser.add_argument('--lambda_v', type=float, default=10.0)
-    parser.add_argument('--lambda_n', type=float, default=1.0)
+    parser.add_argument('--lambda_r', type=float, default=10000.0)
     parser.add_argument('--lambda_w', type=float, default=1.0)
 
     parser.add_argument('--epochs', type=int, default=10)
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     lambdas = train.Lambdas(
         u=args.lambda_u,
         v=args.lambda_v,
-        n=args.lambda_n,
+        r=args.lambda_r,
         w=args.lambda_w,
     )
 
@@ -137,6 +137,14 @@ if __name__ == '__main__':
         torch.save(sdae.state_dict(), args.sdae_out)
 
     elif args.command == 'train':
+        logging.info(f'Parameters:')
+        logging.info(f'         a: {args.conf_a}')
+        logging.info(f'         b: {args.conf_b}')
+        logging.info(f'  lambda_u: {lambdas.u}')
+        logging.info(f'  lambda_v: {lambdas.v}')
+        logging.info(f'  lambda_w: {lambdas.w}')
+        logging.info(f'  lambda_r: {lambdas.r}')
+
         if args.resume:
             logging.info(f'Loading pre-trained MF model from {args.cdl_in}')
             load_model(args.cdl_in, sdae, mf)
