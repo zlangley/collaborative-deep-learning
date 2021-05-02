@@ -11,7 +11,7 @@ import evaluate
 import train
 from mf import MatrixFactorizationModel
 from sdae import StackedDenoisingAutoencoder
-from train import train_sdae, train_model
+from train import pretrain_sdae, train_model
 
 
 def load_model(filename, sdae, mf):
@@ -35,10 +35,19 @@ sdae_activations = {
     'tanh': nn.Tanh(),
 }
 
+recon_losses = {
+    'mse': nn.MSELoss(),
+    'cross-entropy': nn.BCEWithLogitsLoss(),
+}
+
+
+def regularize_sdae_loss(sdae, loss, lambda_w, lambda_n):
+    return lambda pred, actual: lambda_n * loss(pred, actual) + sdae.regularization_term(lambda_w)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
-    parser.add_argument('command')
+    parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--resume', action='store_true')
 
@@ -57,20 +66,18 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_n', type=float, default=1.0)
     parser.add_argument('--lambda_w', type=float, default=1.0)
 
-    parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--epochs', type=int, default=10)
+
+    # SDAE hyperparameters
+    parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--corruption', type=float, default=0.2)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
+    parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
-
-    if args.command not in ['train_sdae', 'train_all', 'predict']:
-        print('unrecognized command')
-        parser.print_help()
-        sys.exit(1)
 
     if args.verbose:
         logging.basicConfig(format='%(asctime)s  %(message)s', datefmt='%I:%M:%S', level=logging.INFO)
@@ -114,21 +121,22 @@ if __name__ == '__main__':
 
     optimizer = optim.Adam(sdae.parameters(), lr=args.lr)
 
-    if args.command == 'train_sdae':
+    if args.command == 'pretrain_sdae':
         if args.resume:
             logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
             sdae.load_state_dict(torch.load(args.sdae_in))
 
         sdae.to(device)
 
-        logging.info(f'Training SDAE')
-        train_sdae(sdae, content_dataset, lambdas, optimizer, epochs=args.epochs, batch_size=args.batch_size)
+        logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
+        loss_fn = recon_losses[args.recon_loss]
+        pretrain_sdae(sdae, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
-        logging.info(f'Saving SDAE model to {args.sdae_out}.')
+        logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
         sdae.cpu()
         torch.save(sdae.state_dict(), args.sdae_out)
 
-    elif args.command == 'train_all':
+    elif args.command == 'train':
         if args.resume:
             logging.info(f'Loading pre-trained MF model from {args.cdl_in}')
             load_model(args.cdl_in, sdae, mf)
@@ -139,9 +147,10 @@ if __name__ == '__main__':
         sdae.train()
         sdae.to(device)
 
-        logging.info(f'Training')
+        logging.info(f'Training with recon loss {args.recon_loss}')
+        recon_loss_fn = recon_losses[args.recon_loss]
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-        train_model(sdae, mf, dataset, optimizer, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
+        train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         logging.info(f'Saving model to {args.cdl_out}')
         save_model(args.cdl_out, sdae, mf)

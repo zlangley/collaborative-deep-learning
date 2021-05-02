@@ -3,9 +3,11 @@ import logging
 
 import torch
 import torch.cuda
+from torch import nn
 from torch import linalg
 from torch import autograd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
+import torch.nn.functional as F
 
 import data
 import evaluate
@@ -17,7 +19,7 @@ ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.
 ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', 16980)
 
 
-def train_model(sdae, mf, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
+def train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device='cpu'):
     with autograd.no_grad():
         # Initialize V to agree with the encodings.
         mf.V.data = sdae.encode(dataset.content).cpu()
@@ -29,19 +31,13 @@ def train_model(sdae, mf, dataset, optimizer, conf, lambdas, epochs, batch_size,
         # These matrices are instead updated manually by block coordinate descent.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
-        sdae_dataset = list(zip(dataset.content, mf.V.to(device)))
+        sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        def loss_fn(sdae_out, items_latent_items):
-            encoding, reconstruction = sdae_out
-            items, latent_items = items_latent_items
+        def latent_loss_fn(pred, target):
+            return lambdas.v * F.mse_loss(pred, target)
 
-            loss = 0
-            loss += sdae_pure_loss(sdae, lambdas)(reconstruction, items)
-            loss += (latent_items - encoding).square().sum(dim=1).mean() * lambdas.v
-            return loss
-
-        train(lambda x: sdae(x[0]), sdae_dataset, batch_size, loss_fn, optimizer)
+        train_autoencoder(sdae, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
         # Update U and V.
         with autograd.no_grad():
@@ -51,30 +47,27 @@ def train_model(sdae, mf, dataset, optimizer, conf, lambdas, epochs, batch_size,
 
             block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, encoded)
 
-            ratings = dataset.ratings.to(device)
+            latent_pred, recon_pred = sdae(dataset.content)
+            ratings_pred = mf.predict()
 
-            encoding, reconstruction = sdae(dataset.content)
-            conf_mat = (conf[0] - conf[1]) * ratings + conf[1] * torch.ones_like(ratings)
+            print_likelihood(
+                sdae=sdae,
+                mf=mf,
+                lambdas=lambdas,
+                conf=conf,
+                ratings_pred=mf.predict(),
+                ratings_target=dataset.ratings,
+                recon_pred=recon_pred,
+                recon_target=dataset.content,
+                latent_pred=latent_pred,
+                latent_target=mf.V.to(device),
+            )
 
-            pred = mf.predict()
-
-            likelihood_w = 0
-            likelihood_w -= sum(weight.square().sum() for weight in sdae.weights) * lambdas.w / 2
-            likelihood_w -= sum(bias.square().sum() for bias in sdae.biases) * lambdas.w / 2
-
-            likelihood_n = -(reconstruction - dataset.content).square().sum() * lambdas.n / 2
-            likelihood_v = -(mf.V.to(device) - encoding).square().sum() * lambdas.v / 2
-            likelihood_u = -mf.U.square().sum() * lambdas.u / 2
-            likelihood_r = -(conf_mat * (ratings - pred.to(device)).square()).sum() / 2
-
-            likelihood = likelihood_w + likelihood_n + likelihood_v + likelihood_u + likelihood_r
-            logging.info(f'  neg_likelihood={-likelihood:>5f} w={-likelihood_w:>5f} n={-likelihood_n:>5f} v={-likelihood_v:>5f} u={-likelihood_u:>5f} r={-likelihood_r:>5f}')
-
-            recall = evaluate.recall(pred, ratings_training_dataset, 300)
+            recall = evaluate.recall(ratings_pred, ratings_training_dataset, 300)
             print(f'  training recall@300: {recall}')
 
-            recall = evaluate.recall(pred, ratings_test_dataset, 300)
-            print(f'  test recall@300: {recall}')
+            recall = evaluate.recall(ratings_pred, ratings_test_dataset, 300)
+            print(f'      test recall@300: {recall}')
 
             sdae.train()
 
@@ -140,37 +133,44 @@ def block_coordinate_descent(U, V, R, conf, lambdas, enc):
         V[j] = linalg.solve(A, b)
 
 
-def train_sdae(sdae, dataset, lambdas, optimizer, epochs, batch_size):
+def pretrain_sdae(sdae, dataset, optimizer, loss_fn, epochs, batch_size):
     logging.info('Beginning CDL training')
-    cur_input = dataset
-
-    loss_fn = lambda sdae_out, actual: (sdae_out[0] - actual).square().sum(dim=1).mean() * lambdas.n
+    cur_dataset = dataset
 
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
         logging.info(f'Training layer {i + 1}/{len(sdae.autoencoders)}')
         for epoch in range(epochs):
             logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-            train(lambda x: autoencoder(x)[1], cur_input, batch_size, loss_fn, optimizer)
+            train_autoencoder(autoencoder, cur_dataset, batch_size, loss_fn, None, optimizer)
 
         with torch.no_grad():
             autoencoder.eval()
-            cur_input = autoencoder.encode(cur_input)
+            cur_dataset = autoencoder.encode(cur_dataset)
             autoencoder.train()
 
     # Fine-tuning.
     for epoch in range(epochs):
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-        train(lambda x: sdae(x)[1], dataset, batch_size, loss_fn, optimizer)
+        train_autoencoder(sdae, dataset, batch_size, loss_fn, None, optimizer)
 
 
-def train(forward, dataset, batch_size, loss_fn, optimizer):
+def train_autoencoder(autoencoder, dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
     dataloader = DataLoader(dataset, batch_size)
     size = len(dataloader.dataset)
 
     for batch, X_b in enumerate(dataloader):
-        pred = forward(X_b)
-        loss = loss_fn(pred, X_b)
+        if type(X_b) != list:
+            # One target: reconstruction.
+            recon_target = X_b
+            _, recon_pred = autoencoder(X_b)
+            loss = recon_loss_fn(recon_pred, recon_target)
+        else:
+            assert len(X_b) == 2
+            # Two targets: latent and reconstruction.
+            latent_target, recon_target = X_b
+            latent_pred, recon_pred = autoencoder(recon_target)
+            loss = latent_loss_fn(latent_pred, latent_target) + recon_loss_fn(recon_pred, recon_target)
 
         optimizer.zero_grad()
         loss.backward()
@@ -181,18 +181,24 @@ def train(forward, dataset, batch_size, loss_fn, optimizer):
             logging.info(f'  current loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
 
-def sdae_pure_loss(sdae: StackedDenoisingAutoencoder, lambdas):
-    def _sdae_loss(pred, actual):
-        # pred = torch.clamp(pred, min=1e-16)
-        # actual = torch.clamp(actual, min=1e-16)
-        # cross_entropies = -(actual * torch.log(pred) + (1 - actual) * torch.log(1 - pred)).sum(dim=1)
-        # return cross_entropies.mean()
+def print_likelihood(sdae, mf, lambdas, conf, ratings_pred, ratings_target, recon_pred, recon_target, latent_pred, latent_target):
+    conf_mat = (conf[0] - conf[1]) * ratings_target + conf[1] * torch.ones_like(ratings_target)
 
-        # First parameter is encoding, second is reconstruction.
-        loss = 0
-        loss += sum(weight.square().sum() for weight in sdae.weights) * lambdas.w
-        loss += sum(bias.square().sum() for bias in sdae.biases) * lambdas.w
-        loss += (pred - actual).square().sum(dim=1).mean() * lambdas.n
-        return loss
+    likelihood_w = 0
+    likelihood_w -= sum(weight.square().sum() for weight in sdae.weights) * lambdas.w / 2
+    likelihood_w -= sum(bias.square().sum() for bias in sdae.biases) * lambdas.w / 2
 
-    return _sdae_loss
+    likelihood_n = -F.mse_loss(recon_pred, recon_target, reduction='sum') * lambdas.n / 2
+    likelihood_v = -F.mse_loss(latent_pred, latent_target, reduction='sum') * lambdas.v / 2
+    likelihood_u = -mf.U.square().sum() * lambdas.u / 2
+    likelihood_r = -(conf_mat * (ratings_target - ratings_pred).square()).sum() / 2
+
+    likelihood = likelihood_w + likelihood_n + likelihood_v + likelihood_u + likelihood_r
+    logging.info(
+        f'  neg_likelihood={-likelihood:>5f}'
+        f'  w={-likelihood_w:>5f}'
+        f'  n={-likelihood_n:>5f}'
+        f'  v={-likelihood_v:>5f}'
+        f'  u={-likelihood_u:>5f}'
+        f'  r={-likelihood_r:>5f}'
+    )

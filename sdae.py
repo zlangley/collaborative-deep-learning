@@ -22,6 +22,12 @@ class StackedDenoisingAutoencoder(nn.Module):
         reconstructed = self.decode(latent)
         return latent, reconstructed
 
+    def regularization_term(self, reg):
+        s = 0
+        s += reg * sum(weight.square().sum() for weight in self.weights)
+        s += reg * sum(bias.square().sum() for bias in self.biases)
+        return s
+
 
 class DenoisingAutoencoder(nn.Module):
     def __init__(self, in_features, latent_size, corruption, dropout=0, activation=nn.Sigmoid()):
