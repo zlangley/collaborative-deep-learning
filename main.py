@@ -8,8 +8,24 @@ import torch.optim as optim
 import data
 import evaluate
 import train
-from cdl import CollaborativeDeepLearning
-from train import train_sdae, train_cdl
+from mf import MatrixFactorizationModel
+from sdae import StackedDenoisingAutoencoder
+from train import train_sdae, train_model
+
+
+def load_model(filename, sdae, mf):
+    checkpoint = torch.load(filename)
+    sdae.load_state_dict(checkpoint['sdae'])
+    mf.U = checkpoint['U']
+    mf.V = checkpoint['V']
+
+
+def save_model(filename, sdae, mf):
+    torch.save({
+        'sdae': sdae.cpu().state_dict(),
+        'U': mf.U,
+        'V': mf.V,
+    }, filename)
 
 
 if __name__ == '__main__':
@@ -42,7 +58,7 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
-    if args.command not in ['train_sdae', 'train_cdl', 'predict']:
+    if args.command not in ['train_sdae', 'train_all', 'predict']:
         print('unrecognized command')
         parser.print_help()
         sys.exit(1)
@@ -74,63 +90,63 @@ if __name__ == '__main__':
         w=args.lambda_w,
     )
 
-    cdl = CollaborativeDeepLearning(
+    latent_size = 50
+    sdae = StackedDenoisingAutoencoder(
         in_features=content_training_dataset.shape[1],
-        num_users=ratings_training_dataset.shape[0],
-        num_items=ratings_training_dataset.shape[1],
-        layer_sizes=[200, 50],
+        layer_sizes=[200, latent_size],
         corruption=args.corruption,
         dropout=args.dropout,
     )
+    mf = MatrixFactorizationModel(
+        target_shape=ratings_training_dataset.shape,
+        latent_size=latent_size,
+    )
 
-    optimizer = optim.Adam(cdl.parameters(), lr=args.lr)
+    optimizer = optim.Adam(sdae.parameters(), lr=args.lr)
 
     if args.command == 'train_sdae':
         if args.resume:
             logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            cdl.sdae.load_state_dict(torch.load(args.sdae_in))
+            sdae.load_state_dict(torch.load(args.sdae_in))
 
-        cdl.sdae.to(device)
+        sdae.to(device)
 
         logging.info(f'Training SDAE')
-        train_sdae(cdl.sdae, content_dataset, lambdas, optimizer, epochs=args.epochs, batch_size=args.batch_size)
+        train_sdae(sdae, content_dataset, lambdas, optimizer, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving SDAE model to {args.sdae_out}.')
-        cdl.sdae.cpu()
-        torch.save(cdl.sdae.state_dict(), args.sdae_out)
+        sdae.cpu()
+        torch.save(sdae.state_dict(), args.sdae_out)
 
-    elif args.command == 'train_cdl':
+    elif args.command == 'train_all':
         if args.resume:
-            logging.info(f'Loading pre-trained CDL from {args.cdl_in}')
-            cdl.load_state_dict(torch.load(args.cdl_in))
+            logging.info(f'Loading pre-trained MF model from {args.cdl_in}')
+            load_model(args.cdl_in, sdae, mf)
         else:
             logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            cdl.sdae.load_state_dict(torch.load(args.sdae_in))
+            sdae.load_state_dict(torch.load(args.sdae_in))
 
-        cdl.sdae.to(device)
+        sdae.train()
+        sdae.to(device)
 
-        logging.info(f'Training CDL')
+        logging.info(f'Training')
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-        train_cdl(cdl, dataset, optimizer, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
+        train_model(sdae, mf, dataset, optimizer, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
-        logging.info(f'Saving CDL model to {args.cdl_out}')
-        cdl.sdae.cpu()
-        torch.save(cdl.state_dict(), args.cdl_out)
+        logging.info(f'Saving model to {args.cdl_out}')
+        save_model(args.cdl_out, sdae, mf)
 
     elif args.command == 'predict':
         load_path = args.cdl_in
         recall = args.recall
 
-        logging.info(f'Loading CDL from {load_path}')
-        state_dict = torch.load(load_path, map_location=device)
-        cdl.load_state_dict(state_dict)
-        cdl.eval()
+        logging.info(f'Loading model from {load_path}')
+        load_model(load_path, sdae, mf)
 
         logging.info(f'Predicting')
-        pred = cdl.predict()
+        pred = mf.predict()
 
         logging.info(f'Calculating recall@{args.recall}')
-
         recall = evaluate.recall(pred, ratings_test_dataset, args.recall)
 
         print(f'recall@{args.recall}: {recall.item()}')

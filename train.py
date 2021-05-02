@@ -16,19 +16,20 @@ Lambdas = namedtuple('Lambdas', ['u', 'v', 'n', 'w'])
 ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', 16980)
 ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', 16980)
 
-def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
+
+def train_model(sdae, mf, dataset, optimizer, conf, lambdas, epochs, batch_size, device='cpu'):
     with autograd.no_grad():
         # Initialize V to agree with the encodings.
-        cdl.V.data = cdl.sdae.encode(dataset.content).cpu()
+        mf.V.data = sdae.encode(dataset.content).cpu()
 
-    logging.info('Beginning CDL training')
+    logging.info('Beginning training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
         # parameters; the matrices U and V of the CDL have require_grad=False.
-        # These matrices are instead updated manually with the coordinate ascent algorithm.
+        # These matrices are instead updated manually by block coordinate descent.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
 
-        sdae_dataset = list(zip(dataset.content, cdl.V.to(device)))
+        sdae_dataset = list(zip(dataset.content, mf.V.to(device)))
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
         def loss_fn(sdae_out, items_latent_items):
@@ -36,34 +37,34 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
             items, latent_items = items_latent_items
 
             loss = 0
-            loss += sdae_pure_loss(cdl.sdae, lambdas)(reconstruction, items)
+            loss += sdae_pure_loss(sdae, lambdas)(reconstruction, items)
             loss += (latent_items - encoding).square().sum(dim=1).mean() * lambdas.v
             return loss
 
-        train(lambda x: cdl.sdae(x[0]), sdae_dataset, batch_size, loss_fn, optimizer)
+        train(lambda x: sdae(x[0]), sdae_dataset, batch_size, loss_fn, optimizer)
 
-        # Update U and V manually with coordinate ascent.
+        # Update U and V.
         with autograd.no_grad():
             # Don't use dropout here.
-            cdl.sdae.eval()
-            encoded = cdl.sdae.encode(dataset.content).cpu()
+            sdae.eval()
+            encoded = sdae.encode(dataset.content).cpu()
 
-            coordinate_ascent(cdl, dataset.ratings, conf, lambdas, encoded)
+            block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, encoded)
 
             ratings = dataset.ratings.to(device)
 
-            encoding, reconstruction = cdl.sdae(dataset.content)
+            encoding, reconstruction = sdae(dataset.content)
             conf_mat = (conf[0] - conf[1]) * ratings + conf[1] * torch.ones_like(ratings)
 
-            pred = cdl.predict()
+            pred = mf.predict()
 
             likelihood_w = 0
-            likelihood_w -= sum(weight.square().sum() for weight in cdl.sdae.weights) * lambdas.w / 2
-            likelihood_w -= sum(bias.square().sum() for bias in cdl.sdae.biases) * lambdas.w / 2
+            likelihood_w -= sum(weight.square().sum() for weight in sdae.weights) * lambdas.w / 2
+            likelihood_w -= sum(bias.square().sum() for bias in sdae.biases) * lambdas.w / 2
 
             likelihood_n = -(reconstruction - dataset.content).square().sum() * lambdas.n / 2
-            likelihood_v = -(cdl.V.to(device) - encoding).square().sum() * lambdas.v / 2
-            likelihood_u = -cdl.U.square().sum() * lambdas.u / 2
+            likelihood_v = -(mf.V.to(device) - encoding).square().sum() * lambdas.v / 2
+            likelihood_u = -mf.U.square().sum() * lambdas.u / 2
             likelihood_r = -(conf_mat * (ratings - pred.to(device)).square()).sum() / 2
 
             likelihood = likelihood_w + likelihood_n + likelihood_v + likelihood_u + likelihood_r
@@ -75,7 +76,7 @@ def train_cdl(cdl, dataset, optimizer, conf, lambdas, epochs, batch_size, device
             recall = evaluate.recall(pred, ratings_test_dataset, 300)
             print(f'  test recall@300: {recall}')
 
-            cdl.sdae.train()
+            sdae.train()
 
 
 class ContentRatingsDataset:
@@ -86,7 +87,7 @@ class ContentRatingsDataset:
         self.ratings = ratings
 
 
-def coordinate_ascent(cdl, R, conf, lambdas, enc):
+def block_coordinate_descent(U, V, R, conf, lambdas, enc):
     """
     :param U: The latent users matrix of shape (num_users, latent_size).
     :param V: The latent items matrix of shape (num_items, latent_size).
@@ -94,9 +95,6 @@ def coordinate_ascent(cdl, R, conf, lambdas, enc):
     :param C: The confidence matrix of shape (num_users, num_items).
     :param enc: The encodings of the content of shape (num_items, latent_size).
     """
-    U = cdl.U
-    V = cdl.V
-
     latent_size = U.shape[1]
     conf_a, conf_b = conf
 
