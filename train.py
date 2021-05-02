@@ -54,10 +54,10 @@ def train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf, lambdas, epoc
                 mf=mf,
                 lambdas=lambdas,
                 conf=conf,
-                ratings_pred=mf.predict(),
+                ratings_pred=ratings_pred,
                 ratings_target=dataset.ratings,
                 latent_pred=latent_pred,
-                latent_target=mf.V.to(device),
+                latent_target=mf.V,
             )
 
             recall = evaluate.recall(ratings_pred, ratings_training_dataset, 300)
