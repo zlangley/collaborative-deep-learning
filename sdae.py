@@ -2,12 +2,12 @@ import torch.nn as nn
 
 
 class StackedDenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, layer_sizes, corruption, dropout):
+    def __init__(self, in_features, layer_sizes, corruption, dropout, activation=nn.Sigmoid()):
         super().__init__()
 
         dims = zip([in_features] + layer_sizes[:-1], layer_sizes)
         self.autoencoders = [
-            DenoisingAutoencoder(rows, cols, corruption, dropout)
+            DenoisingAutoencoder(rows, cols, corruption, dropout, activation)
             for rows, cols in dims
         ]
 
@@ -24,7 +24,7 @@ class StackedDenoisingAutoencoder(nn.Module):
 
 
 class DenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, latent_size, corruption, dropout):
+    def __init__(self, in_features, latent_size, corruption, dropout=0, activation=nn.Sigmoid()):
         """
         Instantiates a DenoisingAutoencoder.
 
@@ -45,7 +45,7 @@ class DenoisingAutoencoder(nn.Module):
         self.encode = nn.Sequential(
             nn.Dropout(corruption),
             encode,
-            nn.Sigmoid(),
+            activation,
         )
         self.decode = nn.Sequential(
             nn.Dropout(dropout),

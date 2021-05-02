@@ -3,6 +3,7 @@ import logging
 import sys
 
 import torch
+import torch.nn as nn
 import torch.optim as optim
 
 import data
@@ -26,6 +27,13 @@ def save_model(filename, sdae, mf):
         'U': mf.U,
         'V': mf.V,
     }, filename)
+
+
+sdae_activations = {
+    'relu': nn.ReLU(),
+    'sigmoid': nn.Sigmoid(),
+    'tanh': nn.Tanh(),
+}
 
 
 if __name__ == '__main__':
@@ -54,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--corruption', type=float, default=0.2)
+    parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
@@ -96,6 +105,7 @@ if __name__ == '__main__':
         layer_sizes=[200, latent_size],
         corruption=args.corruption,
         dropout=args.dropout,
+        activation=sdae_activations[args.activation],
     )
     mf = MatrixFactorizationModel(
         target_shape=ratings_training_dataset.shape,
