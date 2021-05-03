@@ -125,16 +125,18 @@ if __name__ == '__main__':
         w=args.lambda_w,
     )
 
+    layer_sizes = [content_training_dataset.shape[1]] + args.hidden_sizes + [args.latent_size]
+    logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
+
     activation = sdae_activations[args.activation]
 
     autoencoders = []
-    autoencoders.append(Autoencoder(content_training_dataset.shape[1], hidden_sizes[0], args.dropout, activation, tie_weights=True))
-    for in_features, out_features in zip(args.hidden_sizes, args.hidden_sizes[1:]):
+    for in_features, out_features in zip(layer_sizes[:-1], layer_sizes[1:-1]):
         autoencoders.append(Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True))
 
     # [?] Don't use activation function for latent layer.
     # [?] Don't tie weights in latent layer.
-    autoencoders.append(Autoencoder(args.hidden_sizes[-1], args.latent_size, args.dropout, nn.Identity(), tie_weights=False))
+    autoencoders.append(Autoencoder(layer_sizes[-2], layer_sizes[-1], args.dropout, nn.Identity(), tie_weights=False))
 
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
 
