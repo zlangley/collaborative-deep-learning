@@ -15,9 +15,10 @@ class StackedAutoencoder(nn.Module):
             encoder_modules.append(autoencoder._activation)
             encoder_modules.append(autoencoder._dropout)
 
-        # No dropout at the last encoding step.
         encoder_modules.append(self.autoencoders[-1]._encode)
         encoder_modules.append(self.autoencoders[-1]._activation)
+        # Encoding ends after activation but before dropout.
+
         decoder_modules.append(self.autoencoders[-1]._dropout)
         decoder_modules.append(self.autoencoders[-1]._decode)
 
