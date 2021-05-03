@@ -43,28 +43,50 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
             # Don't use dropout here.
             sdae.eval()
             latent_pred = sdae.encode(dataset.content).cpu()
-
-            block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
-
-            ratings_pred = mf.predict()
-
-            print_likelihood(
-                mf=mf,
-                lambdas=lambdas,
-                conf=conf,
-                ratings_pred=ratings_pred,
-                ratings_target=dataset.ratings,
-                latent_pred=latent_pred,
-                latent_target=mf.V,
-            )
-
-            recall = evaluate.recall(ratings_pred, ratings_training_dataset, 300)
-            print(f'  training recall@300: {recall}')
-
-            recall = evaluate.recall(ratings_pred, ratings_test_dataset, 300)
-            print(f'      test recall@300: {recall}')
-
             sdae.train()
+
+        block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
+
+        '''
+        ratings_pred = mf.predict()
+
+        print_likelihood(
+            mf=mf,
+            lambdas=lambdas,
+            conf=conf,
+            ratings_pred=ratings_pred,
+            ratings_target=dataset.ratings,
+            latent_pred=latent_pred,
+            latent_target=mf.V,
+        )
+
+        recall = evaluate.recall(ratings_pred, ratings_training_dataset, 300)
+        print(f'  training recall@300: {recall}')
+
+        recall = evaluate.recall(ratings_pred, ratings_test_dataset, 300)
+        print(f'      test recall@300: {recall}')
+        '''
+
+
+class RatingsMatrix:
+    def __init__(self, data):
+        self.data = data
+        self._nonzero_rows = None
+        self._nonzero_cols = None
+
+    @property
+    def nonzero_rows(self):
+        if self._nonzero_rows is None:
+            self._nonzero_rows = [row.nonzero().squeeze(1) for row in self.data]
+
+        return self._nonzero_rows
+
+    @property
+    def nonzero_cols(self):
+        if self._nonzero_cols is None:
+            self._nonzero_cols = [col.nonzero().squeeze(1) for col in self.data.t()]
+
+        return self._nonzero_cols
 
 
 class ContentRatingsDataset:
@@ -104,7 +126,7 @@ def block_coordinate_descent(U, V, R, conf, lambdas, enc):
 
     A_base = conf_b * V.t() @ V + lambdas.u * torch.eye(latent_size)
     for j in range(len(U)):
-        rated_idx = R[j].nonzero().squeeze(1)
+        rated_idx = R.nonzero_rows[j]
         W = V[rated_idx, :]
         A = (conf_a - conf_b) * W.t() @ W + A_base
         # R[j, rated_idx] is just an all-ones vector
@@ -115,7 +137,7 @@ def block_coordinate_descent(U, V, R, conf, lambdas, enc):
     # The same logic above applies to the users matrix.
     A_base = conf_b * U.t() @ U + lambdas.v * torch.eye(latent_size)
     for j in range(len(V)):
-        rated_idx = R[:, j].nonzero().squeeze(1)
+        rated_idx = R.nonzero_cols[j]
         if len(rated_idx) == 0:
             A = A_base
             b = lv_enc[j]
