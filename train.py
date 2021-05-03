@@ -19,24 +19,12 @@ ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat',
 
 
 def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device='cpu'):
-    with autograd.no_grad():
-        # Initialize V to agree with the encodings.
-        mf.V.data = sdae.encode(dataset.content).cpu()
-
     logging.info('Beginning training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
         # parameters; the matrices U and V of the CDL have require_grad=False.
         # These matrices are instead updated manually by block coordinate descent.
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-
-        sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
-
-        # Update SDAE weights. Loss here only depends on SDAE outputs.
-        def latent_loss_fn(pred, target):
-            return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
-
-        train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
         # Update U and V.
         with autograd.no_grad():
@@ -46,6 +34,13 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
             sdae.train()
 
         block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
+
+        # Update SDAE weights. Loss here only depends on SDAE outputs.
+        def latent_loss_fn(pred, target):
+            return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
+
+        sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
+        train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
         '''
         ratings_pred = mf.predict()
