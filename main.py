@@ -61,6 +61,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
     parser.add_argument('--device', default='cpu')
+    parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--resume', action='store_true')
 
     parser.add_argument('--sdae_in', default='sdae.pt')
@@ -93,6 +94,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
 
     if args.verbose:
         logging.basicConfig(format='%(asctime)s  %(message)s', datefmt='%I:%M:%S', level=logging.INFO)
