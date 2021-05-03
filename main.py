@@ -12,7 +12,7 @@ import data
 import evaluate
 import train
 from mf import MatrixFactorizationModel
-from sdae import StackedAutoencoder
+from sdae import Autoencoder, StackedAutoencoder
 from train import pretrain_sdae, train_model
 
 
@@ -121,13 +121,14 @@ if __name__ == '__main__':
     )
 
     latent_size = 50
-    sdae = StackedAutoencoder(
-        in_features=content_training_dataset.shape[1],
-        layer_sizes=[200, latent_size],
-        dropout=args.dropout,
-        activation=sdae_activations[args.activation],
-        tie_weights=not args.no_tie_weights,
-    )
+    activation = sdae_activations[args.activation]
+
+    # [?] Don't use activation function for latent layer.
+    # [?] Don't tie weights in latent layer.
+    sdae = StackedAutoencoder(autoencoder_stack=[
+        Autoencoder(content_training_dataset.shape[1], 200, args.dropout, activation, tie_weights=True),
+        Autoencoder(200, latent_size, args.dropout, nn.Identity(), tie_weights=False),
+    ])
     mf = MatrixFactorizationModel(
         target_shape=ratings_training_dataset.shape,
         latent_size=latent_size,

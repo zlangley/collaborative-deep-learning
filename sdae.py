@@ -2,14 +2,10 @@ import torch.nn as nn
 
 
 class StackedAutoencoder(nn.Module):
-    def __init__(self, in_features, layer_sizes, dropout, activation=nn.Sigmoid(), tie_weights=True):
+    def __init__(self, autoencoder_stack):
         super().__init__()
 
-        dims = list(zip([in_features] + layer_sizes[:-1], layer_sizes))
-        self.autoencoders = [
-            Autoencoder(rows, cols, dropout, activation, tie_weights=tie_weights)
-            for i, (rows, cols) in enumerate(dims)
-        ]
+        self.autoencoders = autoencoder_stack
 
         self.encode = nn.Sequential(*[autoencoder.encode for autoencoder in self.autoencoders])
         self.decode = nn.Sequential(*[autoencoder.decode for autoencoder in reversed(self.autoencoders)])
