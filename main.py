@@ -38,6 +38,7 @@ def print_params(args):
     logging.info(f'  lambda_u: {args.lambda_u}')
     logging.info(f'  lambda_v: {args.lambda_v}')
     logging.info(f'  lambda_w: {args.lambda_w}')
+    logging.info(f'  lambda_n: {args.lambda_n}')
     logging.info(f'  lambda_r: {args.lambda_r}')
 
 
@@ -53,8 +54,15 @@ recon_losses = {
 }
 
 
-def regularize_sdae_loss(sdae, loss, lambda_w, include_bias):
-    return lambda pred, actual: loss(pred, actual) + sdae.regularization_term(lambda_w, include_bias)
+def regularize_autoencoder_loss(autoencoder, base_loss, lambda_n, lambda_w):
+    def _loss(pred, actual):
+        loss = 0
+        loss += lambda_n * base_loss(pred, actual)
+        loss += lambda_w * sum(weight.square().sum() for weight in autoencoder.weights)
+        loss += lambda_w * sum(bias.square().sum() for bias in autoencoder.biases)
+        return loss / 2
+
+    return _loss
 
 
 if __name__ == '__main__':
@@ -74,23 +82,24 @@ if __name__ == '__main__':
     parser.add_argument('--conf_a', type=float, default=1.0)
     parser.add_argument('--conf_b', type=float, default=0.01)
 
-    parser.add_argument('--lambda_u', type=float, default=1.0)
+    parser.add_argument('--lambda_u', type=float, default=0.1)
     parser.add_argument('--lambda_v', type=float, default=10.0)
-    parser.add_argument('--lambda_r', type=float, default=10000.0)
-    parser.add_argument('--lambda_w', type=float, default=1.0)
+    parser.add_argument('--lambda_w', type=float, default=0.1)
+    parser.add_argument('--lambda_n', type=float, default=1000.0)
+    parser.add_argument('--lambda_r', type=float, default=1.0)
 
     parser.add_argument('--epochs', type=int, default=10)
 
     # SDAE hyperparameters
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--dropout', type=float, default=0.2)
+    parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--corruption', type=float, default=0.3)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
-    parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='cross-entropy')
-    parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[50])
+    parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
+    parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[200])
     parser.add_argument('--latent_size', type=int, default=50)
-    parser.add_argument('--regularize_bias', action='store_false')
+    parser.add_argument('--regularize_bias', action='store_true')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
@@ -130,15 +139,10 @@ if __name__ == '__main__':
 
     activation = sdae_activations[args.activation]
 
-    # [?] Don't use activation function for latent layer.
-    # [?] Don't tie weights in latent layer.
-    autoencoders = []
-    autoencoders.extend(
+    autoencoders = [
         Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True)
-        for in_features, out_features in zip(layer_sizes[:-1], layer_sizes[1:-1])
-    )
-    autoencoders.append(Autoencoder(layer_sizes[-2], layer_sizes[-1], args.dropout, nn.Identity(), tie_weights=False))
-
+        for in_features, out_features in zip(layer_sizes, layer_sizes[1:])
+    ]
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
 
     mf = MatrixFactorizationModel(
@@ -158,8 +162,8 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-        loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w, args.regularize_bias)
-        pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
+        recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
+        pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
         sdae.cpu()
@@ -179,7 +183,7 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w, args.regularize_bias)
+        recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
         train_model(sdae, mf, args.corruption, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
