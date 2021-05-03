@@ -11,11 +11,17 @@ import torch.nn.functional as F
 
 import data
 import evaluate
+from optim import LatentRepresentationOptimizer
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
 
 def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
+    def latent_loss_fn(pred, target):
+        return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
+
+    lr_optim = LatentRepresentationOptimizer(mf, dataset.ratings, conf[0], conf[1], lambdas.u, lambdas.v)
+
     logging.info('Beginning training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
@@ -27,61 +33,27 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
         with autograd.no_grad():
             # Don't use dropout here.
             sdae.eval()
-            latent_pred = sdae.encode(dataset.content).cpu()
+            latent_items_target = sdae.encode(dataset.content).cpu()
             sdae.train()
 
-        block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
+        lr_optim.step(latent_items_target)
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        def latent_loss_fn(pred, target):
-            return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
-
         sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
         train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
-    latent_target = sdae.encode(dataset.content).cpu()
+    latent_items_target = sdae.encode(dataset.content).cpu()
 
     # Now optimize U and V completely holding the SDAE latent layer fixed.
-
-    prev_likelihood = None
+    prev_loss = None
     for i in range(max_iters):
-        likelihood = print_likelihood(
-            mf=mf,
-            lambdas=lambdas,
-            conf=conf,
-            ratings_pred=mf.predict(),
-            ratings_target=dataset.ratings.data,
-            latent_pred=mf.V,
-            latent_target=latent_target,
-        )
-        if prev_likelihood is not None and (prev_likelihood - likelihood) / likelihood < 1e-4:
-            # We converged.
+        loss = lr_optim.loss(latent_items_target)
+        if prev_loss is not None and (prev_loss - loss) / loss < 1e-4:
             break
 
-        prev_likelihood = likelihood
-        block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
-
-
-class RatingsMatrix:
-    def __init__(self, data):
-        self.data = data
-        self._nonzero_rows = None
-        self._nonzero_cols = None
-
-    @property
-    def nonzero_rows(self):
-        if self._nonzero_rows is None:
-            self._nonzero_rows = [row.nonzero().squeeze(1) for row in self.data]
-
-        return self._nonzero_rows
-
-    @property
-    def nonzero_cols(self):
-        if self._nonzero_cols is None:
-            self._nonzero_cols = [col.nonzero().squeeze(1) for col in self.data.t()]
-
-        return self._nonzero_cols
+        lr_optim.step(latent_items_target)
+        prev_loss = loss
 
 
 class ContentRatingsDataset:
@@ -90,59 +62,6 @@ class ContentRatingsDataset:
         # ratings.shape: (num_users, num_items)
         self.content = content
         self.ratings = ratings
-
-
-def block_coordinate_descent(U, V, R, conf, lambdas, enc):
-    """
-    :param U: The latent users matrix of shape (num_users, latent_size).
-    :param V: The latent items matrix of shape (num_items, latent_size).
-    :param R: The ratings matrix of shape (num_users, num_items).
-    :param C: The confidence matrix of shape (num_users, num_items).
-    :param enc: The encodings of the content of shape (num_items, latent_size).
-    """
-    latent_size = U.shape[1]
-    conf_a, conf_b = conf
-
-    lv_enc = enc * lambdas.v
-
-    # We compute Vt @ Ci @ V with the following optimization. Recall
-    # that Ci = diag(C_i1, ..., C_iJ) where C_ij is a if R_ij = 1 and
-    # b otherwise. So we have
-    #
-    #   Vt @ Ci @ V = Vt @ diag((a - b) * Ri + b * ones) @ V
-    #               = (a - b) Vt @ diag(Ri) @ V + b * Vt @ V
-    #
-    # Notice that since Ri is a zero-one matrix, diag(Ri) simply kills
-    # the items of V that user i has does not have in her library; indeed,
-    #                Vt @ diag(Ri) @ V = Wt @ Wr,
-    # where W is the submatrix restricted to rows j with R_ij != 0.
-    # Since W will be *much* smaller than V, it is much more efficient to
-    # first extract this submatrix.
-
-    A_base = conf_b * V.t() @ V + lambdas.u * torch.eye(latent_size)
-    for j in range(len(U)):
-        rated_idx = R.nonzero_rows[j]
-        W = V[rated_idx, :]
-        A = (conf_a - conf_b) * W.t() @ W + A_base
-        # R[j, rated_idx] is just an all-ones vector
-        b = conf_a * W.t().sum(dim=1)
-
-        U[j] = linalg.solve(A, b)
-
-    # The same logic above applies to the users matrix.
-    A_base = conf_b * U.t() @ U + lambdas.v * torch.eye(latent_size)
-    for j in range(len(V)):
-        rated_idx = R.nonzero_cols[j]
-        if len(rated_idx) == 0:
-            A = A_base
-            b = lv_enc[j]
-        else:
-            W = U[rated_idx, :]
-            A = (conf_a - conf_b) * W.t() @ W + A_base
-            # R[rated_idx, j] is just an all-ones vector
-            b = conf_a * W.t().sum(dim=1) + lv_enc[j]
-
-        V[j] = linalg.solve(A, b)
 
 
 def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
@@ -202,20 +121,3 @@ def train_autoencoder(autoencoder, corruption, dataset, batch_size, recon_loss_f
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-
-def print_likelihood(mf, lambdas, conf, ratings_pred, ratings_target, latent_pred, latent_target):
-    conf_mat = (conf[0] - conf[1]) * ratings_target + conf[1] * torch.ones_like(ratings_target)
-
-    likelihood_v = -F.mse_loss(latent_pred, latent_target, reduction='sum') * lambdas.v / 2
-    likelihood_u = -mf.U.square().sum() * lambdas.u / 2
-    likelihood_r = -(conf_mat * (ratings_target - ratings_pred).square()).sum() / 2
-
-    likelihood = likelihood_v + likelihood_u + likelihood_r
-    logging.info(
-        f'  neg_likelihood={-likelihood:>5f}'
-        f'  v={-likelihood_v:>5f}'
-        f'  u={-likelihood_u:>5f}'
-        f'  r={-likelihood_r:>5f}'
-    )
-    return likelihood
