@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     logging.info('Loading dataset')
     variables = scipy.io.loadmat("data/citeulike-a/mult_nor.mat")
-    content_dataset = torch.from_numpy(variables['X']).float().to(device)
+    content_dataset = torch.from_numpy(variables['X'])
     num_items = content_dataset.shape[0]
     # dataset.shape: (16980, 8000)
 
@@ -159,7 +159,12 @@ if __name__ == '__main__':
             logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
             sdae.load_state_dict(torch.load(args.sdae_in))
 
+        sdae.train()
         sdae.to(device)
+
+        idx = torch.randperm(num_items)[:int(num_items * 0.8)]
+        content_dataset = content_dataset[idx]
+        content_dataset = content_dataset.to(device).float()
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
         recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
@@ -181,6 +186,8 @@ if __name__ == '__main__':
 
         sdae.train()
         sdae.to(device)
+
+        content_dataset = content_dataset.to(device).float()
 
         logging.info(f'Training with recon loss {args.recon_loss}')
         recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
