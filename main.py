@@ -48,13 +48,13 @@ sdae_activations = {
 }
 
 recon_losses = {
-    'mse': nn.MSELoss(),
+    'mse': nn.MSELoss(reduction='sum'),
     'cross-entropy': nn.BCEWithLogitsLoss(),
 }
 
 
-def regularize_sdae_loss(sdae, loss, lambda_w):
-    return lambda pred, actual: loss(pred, actual) + sdae.regularization_term(lambda_w)
+def regularize_sdae_loss(sdae, loss, lambda_w, include_bias):
+    return lambda pred, actual: loss(pred, actual) + sdae.regularization_term(lambda_w, include_bias)
 
 
 if __name__ == '__main__':
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--conf_a', type=float, default=1.0)
     parser.add_argument('--conf_b', type=float, default=0.01)
 
-    parser.add_argument('--lambda_u', type=float, default=0.1)
+    parser.add_argument('--lambda_u', type=float, default=1.0)
     parser.add_argument('--lambda_v', type=float, default=10.0)
     parser.add_argument('--lambda_r', type=float, default=10000.0)
     parser.add_argument('--lambda_w', type=float, default=1.0)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='cross-entropy')
     parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[50])
     parser.add_argument('--latent_size', type=int, default=50)
-    parser.add_argument('--no_tie_weights', action='store_true')
+    parser.add_argument('--regularize_bias', action='store_false')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
@@ -158,7 +158,7 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-        loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w)
+        loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w, args.regularize_bias)
         pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
@@ -179,7 +179,7 @@ if __name__ == '__main__':
         sdae.to(device)
 
         logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w)
+        recon_loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w, args.regularize_bias)
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
         train_model(sdae, mf, args.corruption, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 

@@ -37,11 +37,11 @@ class StackedAutoencoder(nn.Module):
         reconstructed = self.decode(latent)
         return latent, reconstructed
 
-    def regularization_term(self, reg):
-        s = 0
-        s += reg * sum(weight.square().sum() for weight in self.weights)
-        s += reg * sum(bias.square().sum() for bias in self.biases)
-        return s
+    def regularization_term(self, reg, include_bias=True):
+        s = sum(weight.square().sum() for weight in self.weights)
+        if include_bias:
+            s += sum(bias.square().sum() for bias in self.biases)
+        return s * reg / 2
 
 
 class Autoencoder(nn.Module):

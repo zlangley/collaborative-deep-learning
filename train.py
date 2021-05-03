@@ -191,7 +191,7 @@ def train_autoencoder(autoencoder, corruption, dataset, batch_size, recon_loss_f
 def print_likelihood(mf, lambdas, conf, ratings_pred, ratings_target, latent_pred, latent_target):
     conf_mat = (conf[0] - conf[1]) * ratings_target + conf[1] * torch.ones_like(ratings_target)
 
-    likelihood_v = -F.mse_loss(latent_pred, latent_target, reduction='sum') * lambdas.v / 2
+    likelihood_v = -(latent_pred - latent_target).square().sum() * lambdas.v / 2
     likelihood_u = -mf.U.square().sum() * lambdas.u / 2
     likelihood_r = -(conf_mat * (ratings_target - ratings_pred).square()).sum() / 2
 
