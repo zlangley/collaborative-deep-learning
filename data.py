@@ -1,4 +1,10 @@
+import scipy
 import torch
+
+
+def read_mult_norm_dat(filename):
+    variables = scipy.io.loadmat(filename)
+    return torch.from_numpy(variables['X'])
 
 
 def read_mult_dat(filename, map_location=None):

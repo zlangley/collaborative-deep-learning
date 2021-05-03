@@ -65,6 +65,11 @@ def regularize_autoencoder_loss(autoencoder, base_loss, lambda_n, lambda_w):
     return _loss
 
 
+def random_subset(x, k):
+    idx = torch.randperm(x.shape[0])[:k]
+    return x[idx]
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
@@ -115,15 +120,12 @@ if __name__ == '__main__':
     device = args.device
     logging.info(f'Using device {device}')
 
-    logging.info('Loading dataset')
-    variables = scipy.io.loadmat("data/citeulike-a/mult_nor.mat")
-    content_dataset = torch.from_numpy(variables['X'])
-    num_items = content_dataset.shape[0]
-    # dataset.shape: (16980, 8000)
+    logging.info('Loading content dataset')
+    content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat')
+    num_items, in_features = content_dataset.shape
+    # content_dataset.shape: (16980, 8000)
 
-    content_training_dataset = content_dataset[:15282]
-    content_validation_dataset = content_dataset[:15282]
-
+    logging.info('Loading ratings dataset')
     ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', num_items)
     ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', num_items)
 
@@ -134,7 +136,7 @@ if __name__ == '__main__':
         w=args.lambda_w,
     )
 
-    layer_sizes = [content_training_dataset.shape[1]] + args.hidden_sizes + [args.latent_size]
+    layer_sizes = [in_features] + args.hidden_sizes + [args.latent_size]
     logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
 
     activation = sdae_activations[args.activation]
@@ -162,8 +164,7 @@ if __name__ == '__main__':
         sdae.train()
         sdae.to(device)
 
-        idx = torch.randperm(num_items)[:int(num_items * 0.8)]
-        content_dataset = content_dataset[idx]
+        content_dataset = random_subset(content_dataset, int(num_items * 0.8))
         content_dataset = content_dataset.to(device).float()
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
