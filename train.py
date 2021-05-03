@@ -162,21 +162,30 @@ def train_autoencoder(autoencoder, corruption, dataset, batch_size, recon_loss_f
             corrupted_X_b = F.dropout(X_b, corruption)
             _, recon_pred = autoencoder(corrupted_X_b)
             loss = recon_loss_fn(recon_pred, recon_target)
+
+            if batch % 100 == 0:
+                current = batch * batch_size
+                logging.info(f'  loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
         else:
             assert len(X_b) == 2
             # Two targets: latent and reconstruction.
             latent_target, recon_target = X_b
+
             corrupted_recon_target = F.dropout(recon_target, corruption)
             latent_pred, recon_pred = autoencoder(corrupted_recon_target)
-            loss = latent_loss_fn(latent_pred, latent_target) + recon_loss_fn(recon_pred, recon_target)
+
+            latent_loss = latent_loss_fn(latent_pred, latent_target)
+            recon_loss = recon_loss_fn(recon_pred, recon_target)
+
+            loss = latent_loss + recon_loss
+
+            if batch % 100 == 0:
+                current = batch * batch_size
+                logging.info(f'  loss {loss:>5f}  latent_loss: {latent_loss:>5f}  recon_loss {recon_loss:>6f}  [{current:>5d}/{size:>5d}]')
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        if batch % 100 == 0:
-            current = batch * batch_size
-            logging.info(f'  current loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
 
 def print_likelihood(mf, lambdas, conf, ratings_pred, ratings_target, latent_pred, latent_target):
