@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_u', type=float, default=1.0)
     parser.add_argument('--lambda_v', type=float, default=10.0)
-    parser.add_argument('--lambda_w', type=float, default=0.1)
+    parser.add_argument('--lambda_w', type=float, default=0.0001)
     parser.add_argument('--lambda_n', type=float, default=1000.0)
     parser.add_argument('--lambda_r', type=float, default=1.0)
 
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     # SDAE hyperparameters
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=283)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--corruption', type=float, default=0.3)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
