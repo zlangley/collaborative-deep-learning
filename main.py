@@ -82,11 +82,13 @@ if __name__ == '__main__':
 
     # SDAE hyperparameters
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--corruption', type=float, default=0.2)
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--dropout', type=float, default=0.2)
+    parser.add_argument('--corruption', type=float, default=0.3)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
-    parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
+    parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='cross-entropy')
+    parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[50])
+    parser.add_argument('--latent_size', type=int, default=50)
     parser.add_argument('--no_tie_weights', action='store_true')
 
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -120,18 +122,22 @@ if __name__ == '__main__':
         w=args.lambda_w,
     )
 
-    latent_size = 50
     activation = sdae_activations[args.activation]
+
+    autoencoders = []
+    autoencoders.append(Autoencoder(content_training_dataset.shape[1], hidden_sizes[0], args.dropout, activation, tie_weights=True))
+    for in_features, out_features in zip(args.hidden_sizes, args.hidden_sizes[1:]):
+        autoencoders.append(Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True))
 
     # [?] Don't use activation function for latent layer.
     # [?] Don't tie weights in latent layer.
-    sdae = StackedAutoencoder(autoencoder_stack=[
-        Autoencoder(content_training_dataset.shape[1], 200, args.dropout, activation, tie_weights=True),
-        Autoencoder(200, latent_size, args.dropout, nn.Identity(), tie_weights=False),
-    ])
+    autoencoders.append(Autoencoder(args.hidden_sizes[-1], args.latent_size, args.dropout, nn.Identity(), tie_weights=False))
+
+    sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
+
     mf = MatrixFactorizationModel(
         target_shape=ratings_training_dataset.shape,
-        latent_size=latent_size,
+        latent_size=args.latent_size,
     )
 
     optimizer = optim.Adam(sdae.parameters(), lr=args.lr)
