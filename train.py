@@ -14,11 +14,8 @@ import evaluate
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
-ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', 16980)
-ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', 16980)
 
-
-def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device='cpu'):
+def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
     logging.info('Beginning training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
@@ -42,25 +39,28 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
         sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
         train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
-        '''
-        ratings_pred = mf.predict()
+    sdae.eval()
+    latent_target = sdae.encode(dataset.content).cpu()
 
-        print_likelihood(
+    # Now optimize U and V completely holding the SDAE latent layer fixed.
+
+    prev_likelihood = None
+    for i in range(max_iters):
+        likelihood = print_likelihood(
             mf=mf,
             lambdas=lambdas,
             conf=conf,
-            ratings_pred=ratings_pred,
-            ratings_target=dataset.ratings,
-            latent_pred=latent_pred,
-            latent_target=mf.V,
+            ratings_pred=mf.predict(),
+            ratings_target=dataset.ratings.data,
+            latent_pred=mf.V,
+            latent_target=latent_target,
         )
+        if prev_likelihood is not None and (prev_likelihood - likelihood) / likelihood < 1e-4:
+            # We converged.
+            break
 
-        recall = evaluate.recall(ratings_pred, ratings_training_dataset, 300)
-        print(f'  training recall@300: {recall}')
-
-        recall = evaluate.recall(ratings_pred, ratings_test_dataset, 300)
-        print(f'      test recall@300: {recall}')
-        '''
+        prev_likelihood = likelihood
+        block_coordinate_descent(mf.U, mf.V, dataset.ratings, conf, lambdas, latent_pred)
 
 
 class RatingsMatrix:
@@ -218,3 +218,4 @@ def print_likelihood(mf, lambdas, conf, ratings_pred, ratings_target, latent_pre
         f'  u={-likelihood_u:>5f}'
         f'  r={-likelihood_r:>5f}'
     )
+    return likelihood
