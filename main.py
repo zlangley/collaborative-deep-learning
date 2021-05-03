@@ -12,7 +12,7 @@ import data
 import evaluate
 import train
 from mf import MatrixFactorizationModel
-from sdae import StackedDenoisingAutoencoder
+from sdae import StackedAutoencoder
 from train import pretrain_sdae, train_model
 
 
@@ -121,10 +121,9 @@ if __name__ == '__main__':
     )
 
     latent_size = 50
-    sdae = StackedDenoisingAutoencoder(
+    sdae = StackedAutoencoder(
         in_features=content_training_dataset.shape[1],
         layer_sizes=[200, latent_size],
-        corruption=args.corruption,
         dropout=args.dropout,
         activation=sdae_activations[args.activation],
         tie_weights=not args.no_tie_weights,
@@ -147,7 +146,7 @@ if __name__ == '__main__':
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
         loss_fn = regularize_sdae_loss(sdae, recon_losses[args.recon_loss], args.lambda_w)
-        pretrain_sdae(sdae, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
+        pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
         sdae.cpu()

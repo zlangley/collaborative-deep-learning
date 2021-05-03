@@ -11,7 +11,6 @@ import torch.nn.functional as F
 
 import data
 import evaluate
-from sdae import StackedDenoisingAutoencoder
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
@@ -50,7 +49,6 @@ def train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf, lambdas, epoc
             ratings_pred = mf.predict()
 
             print_likelihood(
-                sdae=sdae,
                 mf=mf,
                 lambdas=lambdas,
                 conf=conf,
@@ -130,7 +128,7 @@ def block_coordinate_descent(U, V, R, conf, lambdas, enc):
         V[j] = linalg.solve(A, b)
 
 
-def pretrain_sdae(sdae, dataset, optimizer, loss_fn, epochs, batch_size):
+def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
     logging.info('Beginning CDL training')
     cur_dataset = dataset
 
@@ -139,7 +137,7 @@ def pretrain_sdae(sdae, dataset, optimizer, loss_fn, epochs, batch_size):
         logging.info(f'Training layer {i + 1}/{len(sdae.autoencoders)}')
         for epoch in range(epochs):
             logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-            train_autoencoder(autoencoder, cur_dataset, batch_size, loss_fn, None, optimizer)
+            train_autoencoder(autoencoder, corruption, cur_dataset, batch_size, loss_fn, None, optimizer)
 
         with torch.no_grad():
             autoencoder.eval()
@@ -149,24 +147,27 @@ def pretrain_sdae(sdae, dataset, optimizer, loss_fn, epochs, batch_size):
     # Fine-tuning.
     for epoch in range(epochs):
         logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-        train_autoencoder(sdae, dataset, batch_size, loss_fn, None, optimizer)
+        train_autoencoder(sdae, corruption, dataset, batch_size, loss_fn, None, optimizer)
 
 
-def train_autoencoder(autoencoder, dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
+def train_autoencoder(autoencoder, corruption, dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
     dataloader = DataLoader(dataset, batch_size)
     size = len(dataloader.dataset)
 
     for batch, X_b in enumerate(dataloader):
+        # TODO: Make CorruptedDataSet.
         if type(X_b) != list:
             # One target: reconstruction.
             recon_target = X_b
-            _, recon_pred = autoencoder(X_b)
+            corrupted_X_b = F.dropout(X_b, corruption)
+            _, recon_pred = autoencoder(corrupted_X_b)
             loss = recon_loss_fn(recon_pred, recon_target)
         else:
             assert len(X_b) == 2
             # Two targets: latent and reconstruction.
             latent_target, recon_target = X_b
-            latent_pred, recon_pred = autoencoder(recon_target)
+            corrupted_recon_target = F.dropout(recon_target, corruption)
+            latent_pred, recon_pred = autoencoder(corrupted_recon_target)
             loss = latent_loss_fn(latent_pred, latent_target) + recon_loss_fn(recon_pred, recon_target)
 
         optimizer.zero_grad()
@@ -178,7 +179,7 @@ def train_autoencoder(autoencoder, dataset, batch_size, recon_loss_fn, latent_lo
             logging.info(f'  current loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
 
-def print_likelihood(sdae, mf, lambdas, conf, ratings_pred, ratings_target, latent_pred, latent_target):
+def print_likelihood(mf, lambdas, conf, ratings_pred, ratings_target, latent_pred, latent_target):
     conf_mat = (conf[0] - conf[1]) * ratings_target + conf[1] * torch.ones_like(ratings_target)
 
     likelihood_v = -F.mse_loss(latent_pred, latent_target, reduction='sum') * lambdas.v / 2

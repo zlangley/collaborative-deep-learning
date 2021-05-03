@@ -1,13 +1,13 @@
 import torch.nn as nn
 
 
-class StackedDenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, layer_sizes, corruption, dropout, activation=nn.Sigmoid(), tie_weights=True):
+class StackedAutoencoder(nn.Module):
+    def __init__(self, in_features, layer_sizes, dropout, activation=nn.Sigmoid(), tie_weights=True):
         super().__init__()
 
         dims = list(zip([in_features] + layer_sizes[:-1], layer_sizes))
         self.autoencoders = [
-            DenoisingAutoencoder(rows, cols, corruption, dropout, activation, tie_weights=tie_weights)
+            Autoencoder(rows, cols, dropout, activation, tie_weights=tie_weights)
             for i, (rows, cols) in enumerate(dims)
         ]
 
@@ -29,14 +29,13 @@ class StackedDenoisingAutoencoder(nn.Module):
         return s
 
 
-class DenoisingAutoencoder(nn.Module):
-    def __init__(self, in_features, latent_size, corruption, dropout=0, activation=nn.Sigmoid(), tie_weights=True):
+class Autoencoder(nn.Module):
+    def __init__(self, in_features, latent_size, dropout=0, activation=nn.Sigmoid(), tie_weights=True):
         """
-        Instantiates a DenoisingAutoencoder.
+        Instantiates a Autoencoder.
 
         :param in_features: The number of features (rows) of the input.
         :param latent_size: The size of the latent representation.
-        :param corruption: The probability of corrupting (zeroing) each element of the input.
         :param dropout: The dropout probability before decoding.
         :param activiation: The activation function.
         :param tie_weights: Whether to use the same weight matrix in the encoder and decoder.
@@ -61,7 +60,6 @@ class DenoisingAutoencoder(nn.Module):
             nn.init.zeros_(bias)
 
         self.encode = nn.Sequential(
-            nn.Dropout(corruption),
             encode,
             activation,
         )
