@@ -18,7 +18,7 @@ ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.
 ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', 16980)
 
 
-def train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device='cpu'):
+def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device='cpu'):
     with autograd.no_grad():
         # Initialize V to agree with the encodings.
         mf.V.data = sdae.encode(dataset.content).cpu()
@@ -36,7 +36,7 @@ def train_model(sdae, mf, dataset, optimizer, recon_loss_fn, conf, lambdas, epoc
         def latent_loss_fn(pred, target):
             return lambdas.v / lambdas.r * F.mse_loss(pred, target)
 
-        train_autoencoder(sdae, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
+        train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
         # Update U and V.
         with autograd.no_grad():
