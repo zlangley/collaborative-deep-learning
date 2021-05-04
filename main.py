@@ -104,7 +104,6 @@ if __name__ == '__main__':
     parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
     parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[200])
     parser.add_argument('--latent_size', type=int, default=50)
-    parser.add_argument('--regularize_bias', action='store_true')
 
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
