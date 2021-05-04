@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class MatrixFactorizationModel:
+class LatentFactorModel:
     def __init__(self, target_shape, latent_size):
         super().__init__()
 

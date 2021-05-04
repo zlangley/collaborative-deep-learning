@@ -11,8 +11,8 @@ import torch.optim as optim
 import data
 import evaluate
 import train
-from mf import MatrixFactorizationModel
-from sdae import Autoencoder, StackedAutoencoder
+from lfm import LatentFactorModel
+from autoencoder import Autoencoder, StackedAutoencoder
 from train import pretrain_sdae, train_model
 
 
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     ]
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
 
-    mf = MatrixFactorizationModel(
+    mf = LatentFactorModel(
         target_shape=ratings_training_dataset.shape,
         latent_size=args.latent_size,
     )
