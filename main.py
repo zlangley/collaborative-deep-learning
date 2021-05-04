@@ -75,7 +75,6 @@ if __name__ == '__main__':
     parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--resume', action='store_true')
 
     parser.add_argument('--sdae_in', default='sdae.pt')
     parser.add_argument('--sdae_out', default='sdae.pt')
@@ -156,11 +155,6 @@ if __name__ == '__main__':
     if args.command == 'pretrain_sdae':
         print_params(args)
 
-        if args.resume:
-            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            sdae.load_state_dict(torch.load(args.sdae_in))
-
-        sdae.train()
         sdae.to(device)
 
         content_dataset = random_subset(content_dataset, int(num_items * 0.8))
@@ -177,13 +171,8 @@ if __name__ == '__main__':
     elif args.command == 'train':
         print_params(args)
 
-        if args.resume:
-            logging.info(f'Loading pre-trained MF model from {args.cdl_in}')
-            load_model(args.cdl_in, sdae, mf)
-        else:
-            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            sdae.load_state_dict(torch.load(args.sdae_in))
-
+        logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
+        sdae.load_state_dict(torch.load(args.sdae_in))
         sdae.train()
         sdae.to(device)
 
