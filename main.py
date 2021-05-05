@@ -16,18 +16,18 @@ from autoencoder import Autoencoder, StackedAutoencoder
 from train import pretrain_sdae, train_model
 
 
-def load_model(filename, sdae, mf, map_location=None):
+def load_model(filename, sdae, lfm, map_location=None):
     checkpoint = torch.load(filename, map_location=map_location)
     sdae.load_state_dict(checkpoint['sdae'])
-    mf.U = checkpoint['U']
-    mf.V = checkpoint['V']
+    lfm.U = checkpoint['U']
+    lfm.V = checkpoint['V']
 
 
-def save_model(filename, sdae, mf):
+def save_model(filename, sdae, lfm):
     torch.save({
         'sdae': sdae.cpu().state_dict(),
-        'U': mf.U,
-        'V': mf.V,
+        'U': lfm.U,
+        'V': lfm.V,
     }, filename)
 
 
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     ]
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
 
-    mf = LatentFactorModel(
+    lfm = LatentFactorModel(
         target_shape=ratings_training_dataset.shape,
         latent_size=args.latent_size,
     )
@@ -175,20 +175,20 @@ if __name__ == '__main__':
         logging.info(f'Training with recon loss {args.recon_loss}')
         recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
         dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-        train_model(sdae, mf, args.corruption, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
+        train_model(sdae, lfm, args.corruption, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         logging.info(f'Saving model to {args.cdl_out}')
-        save_model(args.cdl_out, sdae, mf)
+        save_model(args.cdl_out, sdae, lfm)
 
     elif args.command == 'predict':
         load_path = args.cdl_in
         recall = args.recall
 
         logging.info(f'Loading model from {load_path}')
-        load_model(load_path, sdae, mf)
+        load_model(load_path, sdae, lfm)
 
         logging.info(f'Predicting')
-        pred = mf.predict()
+        pred = lfm.predict()
 
         logging.info(f'Calculating recall@{args.recall}')
         recall = evaluate.recall(pred, ratings_test_dataset, args.recall)

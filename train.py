@@ -11,16 +11,16 @@ import torch.nn.functional as F
 
 import data
 import evaluate
-from optim import LatentRepresentationOptimizer
+from optim import CDLLatentFactorModelOptimizer
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
 
-def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
+def train_model(sdae, lfm, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
     def latent_loss_fn(pred, target):
         return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
 
-    lr_optim = LatentRepresentationOptimizer(mf, dataset.ratings, conf[0], conf[1], lambdas.u, lambdas.v)
+    lfm_optim = CDLLatentFactorModelOptimizer(lfm, dataset.ratings, conf[0], conf[1], lambdas.u, lambdas.v)
 
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
@@ -35,10 +35,10 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
             latent_items_target = sdae.encode(dataset.content).cpu()
             sdae.train()
 
-        lr_optim.step(latent_items_target)
+        lfm_optim.step(latent_items_target)
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        train_cdl_autoencoder(sdae, dataset.content, mf.V.to(device), corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
+        train_cdl_autoencoder(sdae, dataset.content, lfm.V.to(device), corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
     latent_items_target = sdae.encode(dataset.content).cpu()
@@ -46,11 +46,11 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
     for i in range(max_iters):
-        loss = lr_optim.loss(latent_items_target)
+        loss = lfm_optim.loss(latent_items_target)
         if prev_loss is not None and (prev_loss - loss) / loss < 1e-4:
             break
 
-        lr_optim.step(latent_items_target)
+        lfm_optim.step(latent_items_target)
         prev_loss = loss
 
 

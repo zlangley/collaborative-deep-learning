@@ -5,13 +5,13 @@ from torch import linalg
 import torch.nn.functional as F
 
 
-class LatentRepresentationOptimizer:
+class CDLLatentFactorModelOptimizer:
     """
     Computes latent user and latent item representations given a ratings target and a latent item representation target.
     """
 
-    def __init__(self, mf, ratings, conf_a, conf_b, lambda_u, lambda_v):
-        self.mf = mf
+    def __init__(self, model, ratings, conf_a, conf_b, lambda_u, lambda_v):
+        self.model = model
         self.ratings = ratings
 
         self.conf_a = conf_a
@@ -44,13 +44,13 @@ class LatentRepresentationOptimizer:
         # Since W will be *much* smaller than V, it is much more efficient to
         # first extract this submatrix.
 
-        U = self.mf.U
-        V = self.mf.V
+        U = self.model.U
+        V = self.model.V
 
         conf_a = self.conf_a
         conf_b = self.conf_b
 
-        latent_size = self.mf.latent_size
+        latent_size = self.model.latent_size
 
         A_base = conf_b * V.t() @ V + self.lambda_u * torch.eye(latent_size)
         for j in range(len(U)):
@@ -67,13 +67,13 @@ class LatentRepresentationOptimizer:
 
         latent_items_target = latent_items_target * self.lambda_v
 
-        U = self.mf.U
-        V = self.mf.V
+        U = self.model.U
+        V = self.model.V
 
         conf_a = self.conf_a
         conf_b = self.conf_b
 
-        latent_size = self.mf.latent_size
+        latent_size = self.model.latent_size
 
         A_base = conf_b * U.t() @ U + self.lambda_v * torch.eye(latent_size)
         for j in range(len(V)):
@@ -92,9 +92,9 @@ class LatentRepresentationOptimizer:
     def loss(self, latent_items_target):
         conf_mat = (self.conf_a - self.conf_b) * self.ratings + self.conf_b * torch.ones_like(self.ratings)
 
-        loss_v = self.lambda_v * F.mse_loss(self.mf.V, latent_items_target, reduction='sum') / 2
-        loss_u = self.lambda_u * self.mf.U.square().sum() / 2
-        loss_r = (conf_mat * (self.ratings - self.mf.predict()).square()).sum() / 2
+        loss_v = self.lambda_v * F.mse_loss(self.model.V, latent_items_target, reduction='sum') / 2
+        loss_u = self.lambda_u * self.model.U.square().sum() / 2
+        loss_r = (conf_mat * (self.ratings - self.model.predict()).square()).sum() / 2
 
         loss = loss_v + loss_u + loss_r
         logging.info(
