@@ -16,11 +16,11 @@ from optim import CDLLatentFactorModelOptimizer
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
 
-def train_model(sdae, lfm, corruption, dataset, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
+def train_model(sdae, lfm, corruption, content, ratings, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
     def latent_loss_fn(pred, target):
         return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
 
-    lfm_optim = CDLLatentFactorModelOptimizer(lfm, dataset.ratings, conf[0], conf[1], lambdas.u, lambdas.v)
+    lfm_optim = CDLLatentFactorModelOptimizer(lfm, ratings, conf[0], conf[1], lambdas.u, lambdas.v)
 
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
@@ -32,16 +32,16 @@ def train_model(sdae, lfm, corruption, dataset, optimizer, recon_loss_fn, conf, 
         with autograd.no_grad():
             # Don't use dropout here.
             sdae.eval()
-            latent_items_target = sdae.encode(dataset.content).cpu()
+            latent_items_target = sdae.encode(content).cpu()
             sdae.train()
 
         lfm_optim.step(latent_items_target)
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        train_cdl_autoencoder(sdae, dataset.content, lfm.V.to(device), corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
+        train_cdl_autoencoder(sdae, content, lfm.V.to(device), corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
-    latent_items_target = sdae.encode(dataset.content).cpu()
+    latent_items_target = sdae.encode(content).cpu()
 
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
@@ -52,14 +52,6 @@ def train_model(sdae, lfm, corruption, dataset, optimizer, recon_loss_fn, conf, 
 
         lfm_optim.step(latent_items_target)
         prev_loss = loss
-
-
-class ContentRatingsDataset:
-    def __init__(self, content, ratings):
-        # content.shape: (num_items, num_item_features)
-        # ratings.shape: (num_users, num_items)
-        self.content = content
-        self.ratings = ratings
 
 
 def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
@@ -84,7 +76,7 @@ def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_s
     for epoch in range(epochs):
         logging.info(f'Starting epoch {epoch + 1}/{epochs}')
 
-        dataset = data.TransformDataSet(
+        dataset = data.TransformDataset(
             content,
             lambda x: (F.dropout(x, corruption), x),
         )
@@ -93,7 +85,7 @@ def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_s
 
 def train_cdl_autoencoder(autoencoder, content, latent_items, corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
     # Input to autoencoder is add_noise(item); target is (latent_item, item).
-    dataset = data.TransformDataSet(
+    dataset = data.TransformDataset(
         torch.utils.data.TensorDataset(latent_items, content),
         lambda x: (F.dropout(x[1], corruption), x),
     )

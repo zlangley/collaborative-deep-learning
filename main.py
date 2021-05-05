@@ -174,8 +174,7 @@ if __name__ == '__main__':
 
         logging.info(f'Training with recon loss {args.recon_loss}')
         recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
-        dataset = train.ContentRatingsDataset(content_dataset, ratings_training_dataset)
-        train_model(sdae, lfm, args.corruption, dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
+        train_model(sdae, lfm, args.corruption, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         logging.info(f'Saving model to {args.cdl_out}')
         save_model(args.cdl_out, sdae, lfm)

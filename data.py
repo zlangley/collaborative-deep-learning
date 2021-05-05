@@ -2,7 +2,7 @@ import scipy
 import torch
 
 
-class TransformDataSet:
+class TransformDataset:
     def __init__(self, dataset, transform):
         self._dataset = dataset
         self._transform = transform
