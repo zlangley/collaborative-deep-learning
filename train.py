@@ -22,12 +22,11 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
 
     lr_optim = LatentRepresentationOptimizer(mf, dataset.ratings, conf[0], conf[1], lambdas.u, lambdas.v)
 
-    logging.info('Beginning training')
     for epoch in range(epochs):
         # Each epoch is one iteration of gradient descent which only updates the SDAE
         # parameters; the matrices U and V of the CDL have require_grad=False.
         # These matrices are instead updated manually by block coordinate descent.
-        logging.info(f'Staring epoch {epoch + 1}/{epochs}')
+        logging.info(f'Starting epoch {epoch + 1}/{epochs}')
 
         # Update U and V.
         with autograd.no_grad():
@@ -39,8 +38,7 @@ def train_model(sdae, mf, corruption, dataset, optimizer, recon_loss_fn, conf, l
         lr_optim.step(latent_items_target)
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        sdae_dataset = TensorDataset(mf.V.to(device), dataset.content)
-        train_autoencoder(sdae, corruption, sdae_dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
+        train_cdl_autoencoder(sdae, dataset.content, mf.V.to(device), corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
     latent_items_target = sdae.encode(dataset.content).cpu()
@@ -70,53 +68,55 @@ def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_s
     # Layer-wise pretraining.
     for i, autoencoder in enumerate(sdae.autoencoders):
         logging.info(f'Training layer {i + 1}/{len(sdae.autoencoders)}')
-        for epoch in range(epochs):
-            logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-            train_autoencoder(autoencoder, corruption, cur_dataset, batch_size, loss_fn, None, optimizer)
+
+        train_isolated_autoencoder(autoencoder, cur_dataset, corruption, epochs, batch_size, loss_fn, optimizer)
 
         with torch.no_grad():
             autoencoder.eval()
-            cur_dataset = autoencoder.encode(cur_dataset)
+            cur_dataset = autoencoder.encode(cur_dataset[:])
             autoencoder.train()
 
     # Fine-tuning.
+    train_isolated_autoencoder(sdae, dataset, corruption, epochs, batch_size, loss_fn, optimizer)
+
+
+def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_size, loss_fn, optimizer):
     for epoch in range(epochs):
-        logging.info(f'Staring epoch {epoch + 1}/{epochs}')
-        train_autoencoder(sdae, corruption, dataset, batch_size, loss_fn, None, optimizer)
+        logging.info(f'Starting epoch {epoch + 1}/{epochs}')
+
+        dataset = data.TransformDataSet(
+            content,
+            lambda x: (F.dropout(x, corruption), x),
+        )
+        train(lambda x: autoencoder(x)[1], dataset, loss_fn, batch_size, optimizer)
 
 
-def train_autoencoder(autoencoder, corruption, dataset, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
+def train_cdl_autoencoder(autoencoder, content, latent_items, corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
+    # Input to autoencoder is add_noise(item); target is (latent_item, item).
+    dataset = data.TransformDataSet(
+        torch.utils.data.TensorDataset(latent_items, content),
+        lambda x: (F.dropout(x[1], corruption), x),
+    )
+
+    def loss_fn(pred, target):
+        latent_pred, recon_pred = pred
+        latent_target, recon_target = target
+        return recon_loss_fn(recon_pred, recon_target) + latent_loss_fn(latent_pred, latent_target)
+
+    train(autoencoder, dataset, loss_fn, batch_size, optimizer)
+
+
+def train(model, dataset, loss_fn, batch_size, optimizer):
     dataloader = DataLoader(dataset, batch_size)
-    size = len(dataloader.dataset)
+    size = len(dataset)
 
-    for batch, X_b in enumerate(dataloader):
-        # TODO: Make CorruptedDataSet.
-        if type(X_b) != list:
-            # One target: reconstruction.
-            recon_target = X_b
-            corrupted_X_b = F.dropout(X_b, corruption)
-            _, recon_pred = autoencoder(corrupted_X_b)
-            loss = recon_loss_fn(recon_pred, recon_target)
+    for i, (xb, yb) in enumerate(dataloader):
+        yb_pred = model(xb)
+        loss = loss_fn(yb_pred, yb)
 
-            if batch % 100 == 0:
-                current = batch * batch_size
-                logging.info(f'  loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
-        else:
-            assert len(X_b) == 2
-            # Two targets: latent and reconstruction.
-            latent_target, recon_target = X_b
-
-            corrupted_recon_target = F.dropout(recon_target, corruption)
-            latent_pred, recon_pred = autoencoder(corrupted_recon_target)
-
-            latent_loss = latent_loss_fn(latent_pred, latent_target)
-            recon_loss = recon_loss_fn(recon_pred, recon_target)
-
-            loss = latent_loss + recon_loss
-
-            if batch % 100 == 0:
-                current = batch * batch_size
-                logging.info(f'  loss {loss:>5f}  latent_loss: {latent_loss:>5f}  recon_loss {recon_loss:>6f}  [{current:>5d}/{size:>5d}]')
+        if i % 100 == 0:
+            current = i * batch_size
+            logging.info(f'  loss: {loss:>7f}  [{current:>5d}/{size:>5d}]')
 
         optimizer.zero_grad()
         loss.backward()

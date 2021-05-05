@@ -2,9 +2,26 @@ import scipy
 import torch
 
 
+class TransformDataSet:
+    def __init__(self, dataset, transform):
+        self._dataset = dataset
+        self._transform = transform
+
+    def __getitem__(self, i):
+        return self._transform(self._dataset[i])
+
+    def __len__(self):
+        return len(self._dataset)
+
+
+def random_subset(x, k):
+    idx = torch.randperm(len(x))[:k]
+    return torch.utils.data.Subset(x, idx)
+
+
 def read_mult_norm_dat(filename):
     variables = scipy.io.loadmat(filename)
-    return torch.from_numpy(variables['X'])
+    return torch.from_numpy(variables['X']).float()
 
 
 def read_mult_dat(filename, map_location=None):

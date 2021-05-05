@@ -65,11 +65,6 @@ def regularize_autoencoder_loss(autoencoder, base_loss, lambda_n, lambda_w):
     return _loss
 
 
-def random_subset(x, k):
-    idx = torch.randperm(x.shape[0])[:k]
-    return x[idx]
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
@@ -119,7 +114,7 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info('Loading content dataset')
-    content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat')
+    content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat').to(device)
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
@@ -157,8 +152,7 @@ if __name__ == '__main__':
 
         sdae.to(device)
 
-        content_dataset = random_subset(content_dataset, int(num_items * 0.8))
-        content_dataset = content_dataset.to(device).float()
+        content_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
         recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
