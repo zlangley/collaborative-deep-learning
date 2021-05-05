@@ -1,0 +1,4 @@
+dependencies:
+ - python=3.8
+ - scipy=1.6
+ - pytorch=1.8
