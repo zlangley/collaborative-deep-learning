@@ -1,0 +1,21 @@
+To install:
+```
+conda env create -f environment.yml -n cdl
+```
+
+To pretrain:
+```
+python main.py pretrain_sdae
+```
+
+To train:
+```
+python main.py train
+```
+
+To evaluate:
+```
+python main.py predict
+```
+
+Many parameters are customizable throught command-line arguments. See main.py.
