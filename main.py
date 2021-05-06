@@ -49,7 +49,7 @@ sdae_activations = {
 }
 
 recon_losses = {
-    'mse': nn.MSELoss(reduction='sum'),
+    'mse': nn.MSELoss(),
     'cross-entropy': nn.BCEWithLogitsLoss(),
 }
 
@@ -58,8 +58,8 @@ def regularize_autoencoder_loss(autoencoder, base_loss, lambda_n, lambda_w):
     def _loss(pred, actual):
         loss = 0
         loss += lambda_n * base_loss(pred, actual)
-        loss += lambda_w * sum(weight.square().sum() for weight in autoencoder.weights)
-        loss += lambda_w * sum(bias.square().sum() for bias in autoencoder.biases)
+#        loss += lambda_w * sum(weight.square().sum() for weight in autoencoder.weights)
+#        loss += lambda_w * sum(bias.square().sum() for bias in autoencoder.biases)
         return loss / 2
 
     return _loss
@@ -145,7 +145,9 @@ if __name__ == '__main__':
         latent_size=args.latent_size,
     )
 
-    optimizer = optim.Adam(sdae.parameters(), lr=args.lr)
+#    args.lambda_w /= args.batch_size
+
+    optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
 
     if args.command == 'pretrain_sdae':
         print_params(args)

@@ -18,7 +18,7 @@ Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'w'])
 
 def train_model(sdae, lfm, corruption, content, ratings, optimizer, recon_loss_fn, conf, lambdas, epochs, batch_size, device=None, max_iters=10):
     def latent_loss_fn(pred, target):
-        return lambdas.v / lambdas.r * F.mse_loss(pred, target, reduction='sum') / 2
+        return lambdas.v / lambdas.r * F.mse_loss(pred, target) / 2
 
     lfm_optim = CDLLatentFactorModelOptimizer(lfm, ratings, conf[0], conf[1], lambdas.u, lambdas.v)
 
