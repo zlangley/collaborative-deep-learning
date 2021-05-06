@@ -1,8 +1,5 @@
-import scipy.io
-
 import argparse
 import logging
-import sys
 
 import torch
 import torch.nn as nn
@@ -11,8 +8,8 @@ import torch.optim as optim
 import data
 import evaluate
 import train
-from lfm import LatentFactorModel
 from autoencoder import Autoencoder, StackedAutoencoder
+from lfm import LatentFactorModel
 from train import pretrain_sdae, train_model
 
 

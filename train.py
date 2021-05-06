@@ -1,17 +1,14 @@
-from collections import namedtuple
 import logging
+from collections import namedtuple
 
 import torch
 import torch.cuda
-from torch import nn
-from torch import linalg
-from torch import autograd
-from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
+from torch import autograd
+from torch.utils.data import DataLoader
 
 import data
-import evaluate
-from optim import CDLLatentFactorModelOptimizer
+from lfm import CDLLatentFactorModelOptimizer
 
 Lambdas = namedtuple('Lambdas', ['u', 'v', 'r', 'n', 'w'])
 
