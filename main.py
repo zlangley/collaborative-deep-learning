@@ -54,17 +54,6 @@ recon_losses = {
 }
 
 
-def regularize_autoencoder_loss(autoencoder, base_loss, lambda_n, lambda_w):
-    def _loss(pred, actual):
-        loss = 0
-        loss += lambda_n * base_loss(pred, actual)
-#        loss += lambda_w * sum(weight.square().sum() for weight in autoencoder.weights)
-#        loss += lambda_w * sum(bias.square().sum() for bias in autoencoder.biases)
-        return loss / 2
-
-    return _loss
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
@@ -126,6 +115,7 @@ if __name__ == '__main__':
         u=args.lambda_u,
         v=args.lambda_v,
         r=args.lambda_r,
+        n=args.lambda_n,
         w=args.lambda_w,
     )
 
@@ -145,8 +135,6 @@ if __name__ == '__main__':
         latent_size=args.latent_size,
     )
 
-#    args.lambda_w /= args.batch_size
-
     optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
 
     if args.command == 'pretrain_sdae':
@@ -157,7 +145,7 @@ if __name__ == '__main__':
         content_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
         logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-        recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
+        recon_loss_fn = recon_losses[args.recon_loss]
         pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
         logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
@@ -175,7 +163,7 @@ if __name__ == '__main__':
         content_dataset = content_dataset.to(device).float()
 
         logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = regularize_autoencoder_loss(sdae, recon_losses[args.recon_loss], args.lambda_n, args.lambda_w)
+        recon_loss_fn = recon_losses[args.recon_loss]
         train_model(sdae, lfm, args.corruption, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         logging.info(f'Saving model to {args.cdl_out}')
