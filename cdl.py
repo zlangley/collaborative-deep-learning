@@ -1,5 +1,14 @@
+import logging
+
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
+from torch import linalg, nn
+
+
+# Since we use AdamW, we can rescale our losses with negligible effect on the optimization.
+# Thus, we divide our autoencoder losses by lambda_n.
+def AutoencoderLatentLoss(lambda_v, lambda_n):
+    return lambda pred, target: lambda_v / lambda_n * F.mse_loss(pred, target)
 
 
 class LatentFactorModel:
@@ -17,7 +26,7 @@ class LatentFactorModel:
         return self.U @ self.V.t()
 
 
-class CDLLatentFactorModelOptimizer:
+class LatentFactorModelOptimizer:
     """
     Computes latent user and latent item representations given a ratings target and a latent item representation target.
     """

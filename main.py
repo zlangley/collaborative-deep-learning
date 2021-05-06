@@ -9,7 +9,7 @@ import data
 import evaluate
 import train
 from autoencoder import Autoencoder, StackedAutoencoder
-from lfm import LatentFactorModel
+from cdl import LatentFactorModel
 from train import pretrain_sdae, train_model
 
 
@@ -26,17 +26,6 @@ def save_model(filename, sdae, lfm):
         'U': lfm.U,
         'V': lfm.V,
     }, filename)
-
-
-def print_params(args):
-    logging.info(f'Parameters:')
-    logging.info(f'         a: {args.conf_a}')
-    logging.info(f'         b: {args.conf_b}')
-    logging.info(f'  lambda_u: {args.lambda_u}')
-    logging.info(f'  lambda_v: {args.lambda_v}')
-    logging.info(f'  lambda_w: {args.lambda_w}')
-    logging.info(f'  lambda_n: {args.lambda_n}')
-    logging.info(f'  lambda_r: {args.lambda_r}')
 
 
 sdae_activations = {
@@ -68,7 +57,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_u', type=float, default=0.1)
     parser.add_argument('--lambda_v', type=float, default=10.0)
-    parser.add_argument('--lambda_w', type=float, default=0.1)
+    parser.add_argument('--lambda_w', type=float, default=0.01)
     parser.add_argument('--lambda_n', type=float, default=1000.0)
     parser.add_argument('--lambda_r', type=float, default=1.0)
 
@@ -107,13 +96,16 @@ if __name__ == '__main__':
     ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', num_items)
     ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', num_items)
 
-    lambdas = train.Lambdas(
-        u=args.lambda_u,
-        v=args.lambda_v,
-        r=args.lambda_r,
-        n=args.lambda_n,
-        w=args.lambda_w,
-    )
+    config = {
+        'conf_a': args.conf_a,
+        'conf_b': args.conf_b,
+        'lambda_u': args.lambda_u,
+        'lambda_v': args.lambda_v,
+        'lambda_w': args.lambda_u,
+        'lambda_n': args.lambda_n,
+        'dropout': args.dropout,
+        'corruption': args.corruption,
+    }
     recon_loss_fn = recon_losses[args.recon_loss]
 
     layer_sizes = [in_features] + args.hidden_sizes + [args.latent_size]
@@ -133,7 +125,7 @@ if __name__ == '__main__':
         latent_size=args.latent_size,
     )
 
-    print_params(args)
+    logging.info(f'Config: {config}')
     optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
 
     if args.cdl_in:
@@ -158,7 +150,8 @@ if __name__ == '__main__':
 
         logging.info(f'Training with recon loss {args.recon_loss}')
         recon_loss_fn = recon_losses[args.recon_loss]
-        train_model(sdae, lfm, args.corruption, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, conf=(args.conf_a, args.conf_b), lambdas=lambdas, epochs=args.epochs, batch_size=args.batch_size, device=device)
+
+        train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
         logging.info(f'Saving model to {args.cdl_out}')
         save_model(args.cdl_out, sdae, lfm)

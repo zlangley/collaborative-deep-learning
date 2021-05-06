@@ -1,4 +1,4 @@
-import scipy
+import scipy.io
 import torch
 
 
