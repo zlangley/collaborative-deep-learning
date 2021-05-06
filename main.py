@@ -56,13 +56,12 @@ recon_losses = {
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
-    parser.add_argument('command', choices=['pretrain_sdae', 'train', 'predict'])
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--sdae_in', default='sdae.pt')
+    parser.add_argument('--sdae_in')
     parser.add_argument('--sdae_out', default='sdae.pt')
-    parser.add_argument('--cdl_in', default='cdl.pt')
+    parser.add_argument('--cdl_in')
     parser.add_argument('--cdl_out', default='cdl.pt')
 
     parser.add_argument('--recall', type=int, default=300)
@@ -118,6 +117,7 @@ if __name__ == '__main__':
         n=args.lambda_n,
         w=args.lambda_w,
     )
+    recon_loss_fn = recon_losses[args.recon_loss]
 
     layer_sizes = [in_features] + args.hidden_sizes + [args.latent_size]
     logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
@@ -129,38 +129,35 @@ if __name__ == '__main__':
         for in_features, out_features in zip(layer_sizes, layer_sizes[1:])
     ]
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
+    sdae.to(device)
 
     lfm = LatentFactorModel(
         target_shape=ratings_training_dataset.shape,
         latent_size=args.latent_size,
     )
 
+    print_params(args)
     optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
 
-    if args.command == 'pretrain_sdae':
-        print_params(args)
+    if args.cdl_in:
+        logging.info(f'Loading model from {args.cdl_in}')
+        load_model(args.cdl_in, sdae, lfm)
 
-        sdae.to(device)
+    else:
+        if args.sdae_in:
+            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
+            sdae.load_state_dict(torch.load(args.sdae_in))
+            sdae.train()
+            sdae.to(device)
 
-        content_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
+        else:
+            content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
-        logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-        recon_loss_fn = recon_losses[args.recon_loss]
-        pretrain_sdae(sdae, args.corruption, content_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
+            logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
+            pretrain_sdae(sdae, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
 
-        logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
-        sdae.cpu()
-        torch.save(sdae.state_dict(), args.sdae_out)
-
-    elif args.command == 'train':
-        print_params(args)
-
-        logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-        sdae.load_state_dict(torch.load(args.sdae_in))
-        sdae.train()
-        sdae.to(device)
-
-        content_dataset = content_dataset.to(device).float()
+            logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
+            torch.save(sdae.state_dict(), args.sdae_out)
 
         logging.info(f'Training with recon loss {args.recon_loss}')
         recon_loss_fn = recon_losses[args.recon_loss]
@@ -169,19 +166,10 @@ if __name__ == '__main__':
         logging.info(f'Saving model to {args.cdl_out}')
         save_model(args.cdl_out, sdae, lfm)
 
-    elif args.command == 'predict':
-        load_path = args.cdl_in
-        recall = args.recall
+    logging.info(f'Predicting')
+    pred = lfm.predict()
 
-        logging.info(f'Loading model from {load_path}')
-        load_model(load_path, sdae, lfm)
+    logging.info(f'Calculating recall@{args.recall}')
+    recall = evaluate.recall(pred, ratings_test_dataset, args.recall)
 
-        logging.info(f'Predicting')
-        pred = lfm.predict()
-
-        logging.info(f'Calculating recall@{args.recall}')
-        recall = evaluate.recall(pred, ratings_test_dataset, args.recall)
-
-        print(f'recall@{args.recall}: {recall.item()}')
-
-    logging.info(f'Complete')
+    print(f'recall@{args.recall}: {recall.item()}')
