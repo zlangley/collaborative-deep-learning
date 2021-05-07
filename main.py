@@ -87,14 +87,8 @@ if __name__ == '__main__':
     device = args.device
     logging.info(f'Using device {device}')
 
-    logging.info('Loading content dataset')
-    content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat').to(device)
+    content_dataset, ratings_training_dataset, ratings_test_dataset = data.load_data('./data/citeulike-a')
     num_items, in_features = content_dataset.shape
-    # content_dataset.shape: (16980, 8000)
-
-    logging.info('Loading ratings dataset')
-    ratings_training_dataset = data.read_ratings('data/citeulike-a/cf-train-1-users.dat', num_items)
-    ratings_test_dataset = data.read_ratings('data/citeulike-a/cf-test-1-users.dat', num_items)
 
     config = {
         'conf_a': args.conf_a,
