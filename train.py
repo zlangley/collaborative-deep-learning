@@ -1,9 +1,11 @@
 import logging
+import os
 from collections import namedtuple
 
 import torch
 import torch.cuda
 import torch.nn.functional as F
+from ray import tune
 from torch import autograd
 from torch.utils.data import DataLoader
 
@@ -12,7 +14,7 @@ import data
 from cdl import LatentFactorModelOptimizer
 
 
-def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10):
+def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10, checkpoint_dir=None):
     """
     Trains the CDL model. For best results, the SDAE should be pre-trained.
 
@@ -39,11 +41,17 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
 
         lfm_optim.step(latent_items_target)
 
-        if epoch % 3 == 0:
-            loss = lfm_optim.loss(latent_items_target)
-            loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum')
-            loss += config['lambda_w'] / 2 * (sum(w.square().sum() for w in sdae.weights) + sum(b.square().sum() for b in sdae.biases))
-            logging.info(f'  neg_likelihood: {loss}')
+        with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
+            path = os.path.join(checkpoint_dir, "checkpoint")
+            torch.save((sdae.state_dict(), lfm.V, lfm.U, optimizer.state_dict()), path)
+
+        loss = lfm_optim.loss(latent_items_target)
+        loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum')
+        loss += config['lambda_w'] / 2 * (sum(w.square().sum() for w in sdae.weights) + sum(b.square().sum() for b in sdae.biases))
+#        logging.info(f'  neg_likelihood: {loss}')
+
+        tune.report(loss=loss)
+
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
         train_cdl_autoencoder(sdae, content, lfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)

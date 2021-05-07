@@ -1,18 +1,19 @@
+import os
+
 import scipy.io
 import torch
 
 
 def load_data(data_dir):
     #logging.info('Loading content dataset')
-    content_dataset = read_mult_norm_dat(f'{data_dir}/mult_nor.mat')
+    content_dataset = read_mult_norm_dat(os.path.join(data_dir, 'mult_nor.mat'))
     num_items, _ = content_dataset.shape
 
     #logging.info('Loading ratings dataset')
-    ratings_training_dataset = read_ratings(f'{data_dir}/cf-train-1-users.dat', num_items)
-    ratings_test_dataset = read_ratings(f'{data_dir}/cf-test-1-users.dat', num_items)
+    ratings_training_dataset = read_ratings(os.path.join(data_dir, 'cf-train-1-users.dat'), num_items)
+    ratings_test_dataset = read_ratings(os.path.join(data_dir, 'cf-test-1-users.dat'), num_items)
 
     return content_dataset, ratings_training_dataset, ratings_test_dataset
-
 
 
 class TransformDataset:

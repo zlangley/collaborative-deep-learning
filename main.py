@@ -1,13 +1,15 @@
 import argparse
 import logging
+import os
+from functools import partial
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from ray import tune
 
 import data
 import evaluate
-import train
 from autoencoder import Autoencoder, StackedAutoencoder
 from cdl import LatentFactorModel
 from train import pretrain_sdae, train_model
@@ -38,6 +40,66 @@ recon_losses = {
     'mse': nn.MSELoss(),
     'cross-entropy': nn.BCEWithLogitsLoss(),
 }
+
+
+def make_stacked_autoencoder(in_features, hidden_sizes, latent_size, activation):
+    layer_sizes = [in_features] + hidden_sizes + [latent_size]
+    activation = sdae_activations[activation]
+
+    autoencoders = [
+        Autoencoder(in_features, out_features, config['dropout'], activation, tie_weights=True)
+        for in_features, out_features in zip(layer_sizes, layer_sizes[1:])
+    ]
+    return StackedAutoencoder(autoencoder_stack=autoencoders)
+
+
+def train_cdl(config, checkpoint_dir=None, data_dir=None):
+    content_dataset, ratings_training_dataset, _ = data.load_data(data_dir)
+    num_items, in_features = content_dataset.shape
+
+    sdae = make_stacked_autoencoder(in_features, config['hidden_sizes'], config['latent_size'], config['activation'])
+
+    #    logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
+
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            sdae = nn.DataParallel(sdae)
+        sdae.to(device)
+
+    lfm = LatentFactorModel(
+        target_shape=ratings_training_dataset.shape,
+        latent_size=config['latent_size'],
+    )
+
+    #    logging.info(f'Config: {config}')
+    optimizer = optim.AdamW(sdae.parameters(), lr=config['lr'], weight_decay=config['lambda_w'])
+
+    if checkpoint_dir:
+        checkpoint = os.path.join(checkpoint_dir, 'checkpoint')
+        sdae_state, lfm_items, lfm_users, optimizer_state = torch.load(checkpoint)
+        sdae_state.load_state_dict(sdae_state)
+        lfm.V = lfm_items
+        lfm.U = lfm_users
+        optimizer.load_state_dict(optimizer_state)
+
+    recon_loss_fn = recon_losses[config['recon_loss']]
+    content_pretraining_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
+
+    #    logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
+    pretrain_sdae(sdae, args.corruption, content_pretraining_dataset, optimizer, recon_loss_fn, epochs=config['pretrain_epochs'], batch_size=config['batch_size'])
+
+    #    logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
+    #    torch.save(sdae.state_dict(), args.sdae_out)
+
+    #    logging.info(f'Training with recon loss {args.recon_loss}')
+    recon_loss_fn = recon_losses[config['recon_loss']]
+
+    train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=config['epochs'], batch_size=config['batch_size'], device=device)
+
+#    logging.info(f'Saving model to {args.cdl_out}')
+#    save_model(args.cdl_out, sdae, lfm)
 
 
 if __name__ == '__main__':
@@ -81,15 +143,6 @@ if __name__ == '__main__':
     if args.verbose:
         logging.basicConfig(format='%(asctime)s  %(message)s', datefmt='%I:%M:%S', level=logging.INFO)
 
-    # Note: SDAE inputs and parameters will use the GPU if desired, but U and V
-    # matrices of CDL do not go on the GPU (and therefore nor does the ratings
-    # matrix).
-    device = args.device
-    logging.info(f'Using device {device}')
-
-    content_dataset, ratings_training_dataset, ratings_test_dataset = data.load_data('./data/citeulike-a')
-    num_items, in_features = content_dataset.shape
-
     config = {
         'conf_a': args.conf_a,
         'conf_b': args.conf_b,
@@ -99,61 +152,45 @@ if __name__ == '__main__':
         'lambda_n': args.lambda_n,
         'dropout': args.dropout,
         'corruption': args.corruption,
+        'lr': args.lr,
+
+        'pretrain_epochs': args.epochs,
+        'epochs': args.epochs,
+        'batch_size': args.batch_size,
+
+        'recon_loss': args.recon_loss,
+        'activation': args.activation,
+
+        'hidden_sizes': args.hidden_sizes,
+        'latent_size': args.latent_size,
     }
-    recon_loss_fn = recon_losses[args.recon_loss]
-
-    layer_sizes = [in_features] + args.hidden_sizes + [args.latent_size]
-    logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
-
-    activation = sdae_activations[args.activation]
-
-    autoencoders = [
-        Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True)
-        for in_features, out_features in zip(layer_sizes, layer_sizes[1:])
-    ]
-    sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
-    sdae.to(device)
-
-    lfm = LatentFactorModel(
-        target_shape=ratings_training_dataset.shape,
-        latent_size=args.latent_size,
+    data_dir = '../../data/citeulike-a'
+    result = tune.run(
+        partial(train_cdl, data_dir=data_dir),
+        name='cdl',
+        local_dir=os.getcwd(),
+        config=config,
     )
+    best_trial = result.get_best_trial()
+    print("Best trial config: {}".format(best_trial.config))
 
-    logging.info(f'Config: {config}')
-    optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
+    # Shape irrelevant because we'll override below.
+    lfm = LatentFactorModel((1, 1), best_trial.config['latent_size'])
 
-    if args.cdl_in:
-        logging.info(f'Loading model from {args.cdl_in}')
-        load_model(args.cdl_in, sdae, lfm)
+    checkpoint_path = os.path.join(best_trial.checkpoint.value, "checkpoint")
 
-    else:
-        if args.sdae_in:
-            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            sdae.load_state_dict(torch.load(args.sdae_in))
-            sdae.train()
-            sdae.to(device)
-
-        else:
-            content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
-
-            logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-            pretrain_sdae(sdae, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
-
-            logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
-            torch.save(sdae.state_dict(), args.sdae_out)
-
-        logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = recon_losses[args.recon_loss]
-
-        train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
-
-        logging.info(f'Saving model to {args.cdl_out}')
-        save_model(args.cdl_out, sdae, lfm)
+    _, lfm_items, lfm_users, _ = torch.load(checkpoint_path)
+    lfm.V = lfm_items
+    lfm.U = lfm_users
 
     logging.info(f'Predicting')
     pred = lfm.predict()
 
     logging.info(f'Calculating recall@{args.recall}')
+    ratings_test_dataset = data.read_ratings(f'{data_dir}/cf-test-1-users.dat', 19680)
     recall = evaluate.recall(pred, ratings_test_dataset, args.recall)
 
     print(f'recall@{args.recall}: {recall.item()}')
+
+
+
