@@ -119,7 +119,7 @@ class LatentFactorModelOptimizer:
 
         loss = loss_v + loss_u + loss_r
         logging.info(
-            f'  neg_likelihood={loss:>5f}'
+            f'  lfm_neg_likelihood={loss:>5f}'
             f'  v={loss_v:>5f}'
             f'  u={loss_u:>5f}'
             f'  r={loss_r:>5f}'

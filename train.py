@@ -33,10 +33,17 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
         with autograd.no_grad():
             # Don't use dropout here.
             sdae.eval()
-            latent_items_target = sdae.encode(content).cpu()
+            latent_items_target, recon = sdae(content)
+            latent_items_target = latent_items_target.cpu()
             sdae.train()
 
         lfm_optim.step(latent_items_target)
+
+        if epoch % 3 == 0:
+            loss = lfm_optim.loss(latent_items_target)
+            loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum')
+            loss += config['lambda_w'] / 2 * (sum(w.square().sum() for w in sdae.weights) + sum(b.square().sum() for b in sdae.biases))
+            logging.info(f'  neg_likelihood: {loss}')
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
         train_cdl_autoencoder(sdae, content, lfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)
