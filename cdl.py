@@ -124,4 +124,4 @@ class LatentFactorModelOptimizer:
             f'  u={loss_u:>5f}'
             f'  r={loss_r:>5f}'
         )
-        return loss
+        return loss.item()

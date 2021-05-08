@@ -123,6 +123,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_n', type=float, default=1000.0)
     parser.add_argument('--lambda_r', type=float, default=1.0)
 
+    parser.add_argument('--pretrain_epochs', type=int, default=10)
     parser.add_argument('--epochs', type=int, default=10)
 
     # SDAE hyperparameters
@@ -146,15 +147,15 @@ if __name__ == '__main__':
     config = {
         'conf_a': args.conf_a,
         'conf_b': args.conf_b,
-        'lambda_u': tune.loguniform(1e-2, 1e2),
-        'lambda_v': tune.loguniform(1e0, 1e2),
-        'lambda_w': tune.loguniform(1e-5, 1e-2),
-        'lambda_n': tune.loguniform(1e2, 1e5),
+        'lambda_u': tune.qloguniform(.1, 50, .1),
+        'lambda_v': tune.qloguniform(10, 100, 5),
+        'lambda_w': tune.qloguniform(1e-6, 1e-3, 1e-6),
+        'lambda_n': tune.qloguniform(1e3, 1e5, 1e3),
         'dropout': args.dropout,
         'corruption': args.corruption,
         'lr': args.lr,
 
-        'pretrain_epochs': args.epochs,
+        'pretrain_epochs': args.pretrain_epochs,
         'batch_size': args.batch_size,
 
         'recon_loss': args.recon_loss,
@@ -166,7 +167,7 @@ if __name__ == '__main__':
 
     data_dir = '/ilab/users/zbl4/cs550/project/collaborative-deep-learning/data/citeulike-a'
     result = tune.run(
-        partial(train_cdl, data_dir=data_dir, epochs=args.epochs, device=device, checkpoint_dir='/common/users/zbl4'),
+        partial(train_cdl, data_dir=data_dir, epochs=args.epochs, checkpoint_dir='/common/users/zbl4'),
         name='cdl',
         local_dir='/common/users/zbl4',
         config=config,

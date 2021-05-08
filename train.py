@@ -71,6 +71,9 @@ def train_model(sdae, lfm, content, ratings, ratings_test_dataset, optimizer, re
         lfm_optim.step(latent_items_target)
         prev_loss = loss
 
+    recall = evaluate.recall(lfm.predict(), ratings_test_dataset, 300)
+    tune.report(recall=recall.item())
+
 
 def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
     cur_dataset = dataset
