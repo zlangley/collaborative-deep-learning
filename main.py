@@ -102,7 +102,7 @@ if __name__ == '__main__':
         'conf_b': args.conf_b,
         'lambda_u': args.lambda_u,
         'lambda_v': args.lambda_v,
-        'lambda_w': args.lambda_u,
+        'lambda_w': args.lambda_w,
         'lambda_n': args.lambda_n,
         'dropout': args.dropout,
         'corruption': args.corruption,
