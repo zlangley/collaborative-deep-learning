@@ -53,20 +53,21 @@ def make_stacked_autoencoder(in_features, hidden_sizes, latent_size, activation)
     return StackedAutoencoder(autoencoder_stack=autoencoders)
 
 
-def train_cdl(config, checkpoint_dir=None, data_dir=None):
-    content_dataset, ratings_training_dataset, _ = data.load_data(data_dir)
-    num_items, in_features = content_dataset.shape
-
-    sdae = make_stacked_autoencoder(in_features, config['hidden_sizes'], config['latent_size'], config['activation'])
-
-    #    logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
-
+def train_cdl(config, epochs=10, checkpoint_dir=None, data_dir=None):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
-        if torch.cuda.device_count() > 1:
-            sdae = nn.DataParallel(sdae)
-        sdae.to(device)
+
+    content_dataset, ratings_training_dataset, ratings_test_dataset = data.load_data(data_dir)
+    content_dataset = content_dataset.to(device)
+    num_items, in_features = content_dataset.shape
+
+    sdae = make_stacked_autoencoder(in_features, config['hidden_sizes'], config['latent_size'], config['activation'])
+    if torch.cuda.device_count() > 1:
+        sdae = nn.DataParallel(sdae)
+    sdae.to(device)
+
+    #    logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
 
     lfm = LatentFactorModel(
         target_shape=ratings_training_dataset.shape,
@@ -96,7 +97,7 @@ def train_cdl(config, checkpoint_dir=None, data_dir=None):
     #    logging.info(f'Training with recon loss {args.recon_loss}')
     recon_loss_fn = recon_losses[config['recon_loss']]
 
-    train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=config['epochs'], batch_size=config['batch_size'], device=device)
+    train_model(sdae, lfm, content_dataset, ratings_training_dataset, ratings_test_dataset, optimizer, recon_loss_fn, config, epochs=epochs, batch_size=config['batch_size'], device=device)
 
 #    logging.info(f'Saving model to {args.cdl_out}')
 #    save_model(args.cdl_out, sdae, lfm)
@@ -104,7 +105,6 @@ def train_cdl(config, checkpoint_dir=None, data_dir=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
-    parser.add_argument('--device', default='cpu')
     parser.add_argument('--seed', type=int, default=0)
 
     parser.add_argument('--sdae_in')
@@ -146,16 +146,15 @@ if __name__ == '__main__':
     config = {
         'conf_a': args.conf_a,
         'conf_b': args.conf_b,
-        'lambda_u': args.lambda_u,
-        'lambda_v': args.lambda_v,
-        'lambda_w': args.lambda_u,
-        'lambda_n': args.lambda_n,
+        'lambda_u': tune.loguniform(1e-2, 1e2),
+        'lambda_v': tune.loguniform(1e0, 1e2),
+        'lambda_w': tune.loguniform(1e-5, 1e-2),
+        'lambda_n': tune.loguniform(1e2, 1e5),
         'dropout': args.dropout,
         'corruption': args.corruption,
         'lr': args.lr,
 
         'pretrain_epochs': args.epochs,
-        'epochs': args.epochs,
         'batch_size': args.batch_size,
 
         'recon_loss': args.recon_loss,
@@ -164,20 +163,25 @@ if __name__ == '__main__':
         'hidden_sizes': args.hidden_sizes,
         'latent_size': args.latent_size,
     }
-    data_dir = '../../data/citeulike-a'
+
+    data_dir = '/ilab/users/zbl4/cs550/project/collaborative-deep-learning/data/citeulike-a'
     result = tune.run(
-        partial(train_cdl, data_dir=data_dir),
+        partial(train_cdl, data_dir=data_dir, epochs=args.epochs, device=device, checkpoint_dir='/common/users/zbl4'),
         name='cdl',
-        local_dir=os.getcwd(),
+        local_dir='/common/users/zbl4',
         config=config,
+        num_samples=15,
+        resources_per_trial={'cpu': 4, 'gpu': 1},
+        checkpoint_score_attr='recall',
+        checkpoint_freq=0,
     )
-    best_trial = result.get_best_trial()
+    best_trial = result.get_best_trial(metric='recall', mode='max')
     print("Best trial config: {}".format(best_trial.config))
 
     # Shape irrelevant because we'll override below.
     lfm = LatentFactorModel((1, 1), best_trial.config['latent_size'])
 
-    checkpoint_path = os.path.join(best_trial.checkpoint.value, "checkpoint")
+    checkpoint_path = os.path.join(best_trial.checkpoint.value, 'checkpoint')
 
     _, lfm_items, lfm_users, _ = torch.load(checkpoint_path)
     lfm.V = lfm_items

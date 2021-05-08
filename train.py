@@ -11,10 +11,11 @@ from torch.utils.data import DataLoader
 
 import cdl
 import data
+import evaluate
 from cdl import LatentFactorModelOptimizer
 
 
-def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10, checkpoint_dir=None):
+def train_model(sdae, lfm, content, ratings, ratings_test_dataset, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10, checkpoint_dir=None):
     """
     Trains the CDL model. For best results, the SDAE should be pre-trained.
 
@@ -36,21 +37,22 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
             # Don't use dropout here.
             sdae.eval()
             latent_items_target, recon = sdae(content)
-            latent_items_target = latent_items_target.cpu()
             sdae.train()
 
+        latent_items_target = latent_items_target.cpu()
         lfm_optim.step(latent_items_target)
 
-        with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
-            path = os.path.join(checkpoint_dir, "checkpoint")
-            torch.save((sdae.state_dict(), lfm.V, lfm.U, optimizer.state_dict()), path)
+        if epoch % 10 == 0:
+            with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
+                path = os.path.join(checkpoint_dir, "checkpoint")
+                torch.save((sdae.state_dict(), lfm.V, lfm.U, optimizer.state_dict()), path)
 
-        loss = lfm_optim.loss(latent_items_target)
-        loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum')
-        loss += config['lambda_w'] / 2 * (sum(w.square().sum() for w in sdae.weights) + sum(b.square().sum() for b in sdae.biases))
+        #loss = lfm_optim.loss(latent_items_target)
+        #loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum').cpu()
+        #loss += config['lambda_w'] / 2 * (sum(w.square().sum() for w in sdae.weights) + sum(b.square().sum() for b in sdae.biases)).cpu()
 #        logging.info(f'  neg_likelihood: {loss}')
-
-        tune.report(loss=loss)
+        recall = evaluate.recall(lfm.predict(), ratings_test_dataset, 300)
+        tune.report(recall=recall.item())
 
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
