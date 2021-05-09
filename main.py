@@ -43,7 +43,7 @@ recon_losses = {
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('--device', default='cpu')
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--seed', type=int, default=1)
 
     parser.add_argument('--sdae_in')
     parser.add_argument('--sdae_out', default='sdae.pt')
@@ -77,6 +77,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
 
     if args.verbose:
         logging.basicConfig(format='%(asctime)s  %(message)s', datefmt='%I:%M:%S', level=logging.INFO)
