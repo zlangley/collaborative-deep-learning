@@ -59,7 +59,6 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_v', type=float, default=10.0)
     parser.add_argument('--lambda_w', type=float, default=0.01)
     parser.add_argument('--lambda_n', type=float, default=1000.0)
-    parser.add_argument('--lambda_r', type=float, default=1.0)
 
     parser.add_argument('--pretrain_epochs', type=int, default=10)
     parser.add_argument('--epochs', type=int, default=10)
