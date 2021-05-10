@@ -7,7 +7,6 @@ import torch.optim as optim
 
 import data
 import evaluate
-import train
 from autoencoder import Autoencoder, StackedAutoencoder
 from cdl import LatentFactorModel
 from train import train_stacked_autoencoders, train_isolated_autoencoder, train_model

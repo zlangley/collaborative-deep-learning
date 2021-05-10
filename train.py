@@ -1,5 +1,4 @@
 import logging
-from collections import namedtuple
 
 import torch
 import torch.cuda
