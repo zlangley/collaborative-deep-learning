@@ -62,12 +62,12 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
         prev_loss = loss
 
 
-def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
+def train_stacked_autoencoders(autoencoders, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
     cur_dataset = dataset
 
     # Layer-wise pretraining.
-    for i, autoencoder in enumerate(sdae.autoencoders):
-        logging.info(f'Training layer {i + 1}/{len(sdae.autoencoders)}')
+    for i, autoencoder in enumerate(autoencoders):
+        logging.info(f'Training autoencoder {i + 1}/{len(autoencoders)}')
 
         train_isolated_autoencoder(autoencoder, cur_dataset, corruption, epochs, batch_size, loss_fn, optimizer)
 
@@ -75,9 +75,6 @@ def pretrain_sdae(sdae, corruption, dataset, optimizer, loss_fn, epochs, batch_s
             autoencoder.eval()
             cur_dataset = autoencoder.encode(cur_dataset[:])
             autoencoder.train()
-
-    # Fine-tuning.
-    train_isolated_autoencoder(sdae, dataset, corruption, epochs, batch_size, loss_fn, optimizer)
 
 
 def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_size, loss_fn, optimizer):
