@@ -54,11 +54,11 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
     for i in range(max_iters):
+        lfm_optim.step(latent_items_target)
         loss = lfm_optim.loss(latent_items_target)
         if prev_loss is not None and (prev_loss - loss) / loss < 1e-4:
             break
 
-        lfm_optim.step(latent_items_target)
         prev_loss = loss
 
 
