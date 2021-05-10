@@ -10,7 +10,7 @@ import evaluate
 import train
 from autoencoder import Autoencoder, StackedAutoencoder
 from cdl import LatentFactorModel
-from train import pretrain_sdae, train_model
+from train import train_stacked_autoencoders, train_isolated_autoencoder, train_model
 
 
 def load_model(filename, sdae, lfm, map_location=None):
@@ -144,7 +144,8 @@ if __name__ == '__main__':
             content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
             logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-            pretrain_sdae(sdae, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
+            train_stacked_autoencoders(autoencoders, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
+            train_isolated_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
 
             logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
             torch.save(sdae.state_dict(), args.sdae_out)

@@ -5,24 +5,22 @@ class StackedAutoencoder(nn.Module):
     def __init__(self, autoencoder_stack):
         super().__init__()
 
-        self.autoencoders = autoencoder_stack
-
         encoder_modules = []
         decoder_modules = []
 
-        for autoencoder in self.autoencoders[:-1]:
+        for autoencoder in autoencoder_stack[:-1]:
             encoder_modules.append(autoencoder._encode)
             encoder_modules.append(autoencoder._activation)
             encoder_modules.append(autoencoder._dropout)
 
-        encoder_modules.append(self.autoencoders[-1]._encode)
-        encoder_modules.append(self.autoencoders[-1]._activation)
+        encoder_modules.append(autoencoder_stack[-1]._encode)
+        encoder_modules.append(autoencoder_stack[-1]._activation)
         # Encoding ends after activation but before dropout.
 
-        decoder_modules.append(self.autoencoders[-1]._dropout)
-        decoder_modules.append(self.autoencoders[-1]._decode)
+        decoder_modules.append(autoencoder_stack[-1]._dropout)
+        decoder_modules.append(autoencoder_stack[-1]._decode)
 
-        for autoencoder in reversed(self.autoencoders[:-1]):
+        for autoencoder in reversed(autoencoder_stack[:-1]):
             decoder_modules.append(autoencoder._activation)
             decoder_modules.append(autoencoder._dropout)
             decoder_modules.append(autoencoder._decode)
@@ -30,8 +28,8 @@ class StackedAutoencoder(nn.Module):
         self.encode = nn.Sequential(*encoder_modules)
         self.decode = nn.Sequential(*decoder_modules)
 
-        self.weights = [weight for ae in self.autoencoders for weight in ae.weights]
-        self.biases = [bias for ae in self.autoencoders for bias in ae.biases]
+        self.weights = [weight for ae in autoencoder_stack for weight in ae.weights]
+        self.biases = [bias for ae in autoencoder_stack for bias in ae.biases]
 
     def forward(self, x):
         latent = self.encode(x)
