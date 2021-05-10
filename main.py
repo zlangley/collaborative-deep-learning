@@ -1,6 +1,7 @@
 import argparse
 import logging
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -89,7 +90,8 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info('Loading content dataset')
-    content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat').to(device)
+    #content_dataset = data.read_mult_norm_dat('data/citeulike-a/mult_nor.mat').to(device)
+    content_dataset = torch.from_numpy(np.load('data/citeulike-a/sentence_embeddings_citeulike_a.npy')).to(device)
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
