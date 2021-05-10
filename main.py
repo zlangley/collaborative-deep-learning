@@ -61,6 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_n', type=float, default=1000.0)
     parser.add_argument('--lambda_r', type=float, default=1.0)
 
+    parser.add_argument('--pretrain_epochs', type=int, default=10)
     parser.add_argument('--epochs', type=int, default=10)
 
     # SDAE hyperparameters
@@ -144,7 +145,7 @@ if __name__ == '__main__':
             content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
             logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-            pretrain_sdae(sdae, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.epochs, batch_size=args.batch_size)
+            pretrain_sdae(sdae, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
 
             logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
             torch.save(sdae.state_dict(), args.sdae_out)
