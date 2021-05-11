@@ -1,37 +1,49 @@
-from collections import Counter
-
-import nltk
-import pandas as pd
 import torch
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 
-out = 'data/processed/citeulike-a/content'
-k = 8000
+
+def preprocess_content():
+    indices = [[], []]
+    values = []
+
+    with open('data/raw/citeulike-a/mult.dat') as f:
+        for doc_id, line in enumerate(f):
+            tokens = line.split()[1:]
+
+            for token in tokens:
+                word_id, cnt = tuple(map(int, token.split(':')))
+                indices[0].append(doc_id)
+                indices[1].append(word_id)
+                values.append(cnt)
+
+    x = torch.sparse_coo_tensor(indices, values, dtype=torch.float32).to_dense()
+
+    maxes, _ = x.max(dim=1, keepdim=True)
+    x /= maxes
+
+    torch.save(x, 'data/processed/citeulike-a/content.pt')
+
+
+def preprocess_ratings_file(filename):
+    indices = [[], []]
+
+    with open(f'data/raw/citeulike-a/{filename}') as f:
+        for i, line in enumerate(f):
+            item_ids = line.split()[1:]
+
+            for item_id in item_ids:
+                indices[0].append(i)
+                indices[1].append(int(item_id))
+
+    values = [1] * len(indices[0])
+
+    x = torch.sparse_coo_tensor(indices, values, dtype=torch.float32).to_dense()
+    torch.save(x, f'data/processed/citeulike-a/{filename}')
+
 
 if __name__ == '__main__':
-    nltk.download('punkt')
-    nltk.download('stopwords')
+    preprocess_content()
 
-    stops = set(stopwords.words('english'))
-
-    df = pd.read_csv('./data/raw/citeulike-a/raw-data.csv')
-    title_abstracts = df['raw.title'] + ' ' + df['raw.abstract']
-
-    docs = [word_tokenize(txt) for txt in title_abstracts]
-    docs = [[word.lower() for word in doc if word.isalpha() and word not in stops] for doc in docs]
-
-    cnt = Counter([word for doc in docs for word in doc])
-    common = [w for w, _ in cnt.most_common(k)]
-
-    dictionary = {}
-    for i, word in enumerate(common):
-        dictionary[word] = i
-
-    data = torch.zeros(len(docs), k)
-    for i, doc in enumerate(docs):
-        for word in doc:
-            if word in dictionary:
-                data[i][dictionary[word]] += 1
-
-    torch.save(data, out)
+    for a in ['train', 'test']:
+        for b in [1, 10]:
+            for c in ['users', 'items']:
+                preprocess_ratings_file(f'cf-{a}-{b}-{c}.dat')
