@@ -25,7 +25,7 @@ source code expects, you can run
 ```
 make features
 ```
-which will read `/data/raw` and write to `data/processed`.
+which will read from `data/raw/` and write to `data/processed/`.
 
 ## Training and Inference
 
