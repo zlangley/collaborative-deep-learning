@@ -1,3 +1,5 @@
+import os
+
 import torch
 
 
@@ -37,7 +39,8 @@ def preprocess_ratings_file(filename, shape):
     values = [1] * len(indices[0])
 
     x = torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32)
-    torch.save(x, f'data/processed/citeulike-a/{filename}')
+    base, _ = os.path.splitext(filename)
+    torch.save(x, f'data/processed/citeulike-a/{base}.pt')
 
 
 if __name__ == '__main__':

@@ -92,8 +92,8 @@ if __name__ == '__main__':
     # content_dataset.shape: (16980, 8000)
 
     logging.info('Loading ratings datasets')
-    ratings_training_dataset = torch.load('data/processed/citeulike-a/cf-train-1-users.dat').to_dense()
-    ratings_test_dataset = torch.load('data/processed/citeulike-a/cf-test-1-users.dat').to_dense()
+    ratings_training_dataset = torch.load('data/processed/citeulike-a/cf-train-1-users.pt').to_dense()
+    ratings_test_dataset = torch.load('data/processed/citeulike-a/cf-test-1-users.pt').to_dense()
 
     config = {
         'conf_a': args.conf_a,
