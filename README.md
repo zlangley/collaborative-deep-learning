@@ -29,12 +29,16 @@ which will read from `data/raw/` and write to `data/processed/`.
 
 ## Training and Inference
 
-The file `src/main.py` will train the CDL from the data files created in the
+The file `train.py` will train the CDL from the data files created in the
 previous step.  To train the model and compute recall@300, you can run
 ```
-python src/main.py -v
+python train.py -v
 ```
 The `-v` flag toggles "verbose" mode. There are many more command-line flags
 to customize behavior; almost every hyperparameter can be set without changing
 any code. By default, the BERT embedding will be used; to use the bag-of-words
-embedding, run `src/main.py` with the flag `--embedding bow`.
+embedding, run `train.py` with the flag `--embedding bow`.
+
+The training script will output the recall@300 when finished. It will also
+save the model to disk (by default in a file `model.pt`, but configurable with
+the `--out` flag). The `infer.py` program can be run to (re)compute the recall.
