@@ -7,9 +7,8 @@ import torch.optim as optim
 
 import data
 import evaluate
-from autoencoder import Autoencoder, StackedAutoencoder
-from cdl import LatentFactorModel
-from train import train_stacked_autoencoders, train_isolated_autoencoder, train_model
+from cdl import train_stacked_autoencoders, train_isolated_autoencoder, train_model
+from model import Autoencoder, StackedAutoencoder, LatentFactorModel
 
 
 def load_model(filename, sdae, lfm, map_location=None):
@@ -88,6 +87,7 @@ if __name__ == '__main__':
         content_dataset = torch.load('data/processed/citeulike-a/content-bert.pt', map_location=device)
     else:
         content_dataset = torch.load('data/processed/citeulike-a/content-bag.pt', map_location=device).to_dense()
+
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
