@@ -49,8 +49,8 @@ class LatentFactorModelOptimizer:
         self.lambda_v = lambda_v
 
         # Precompute the nonzero entries of each row and column from the ratings matrix.
-        self._ratings_nonzero_rows = [row.nonzero().squeeze(1) for row in ratings]
-        self._ratings_nonzero_cols = [col.nonzero().squeeze(1) for col in ratings.t()]
+        self._ratings_nonzero_rows = [row.coalesce().indices().squeeze(0) for row in ratings]
+        self._ratings_nonzero_cols = [col.coalesce().indices().squeeze(0) for col in ratings.t()]
 
     def step(self, latent_item_target):
         self.step_users()
@@ -118,11 +118,11 @@ class LatentFactorModelOptimizer:
             V[j] = linalg.solve(A, b)
 
     def loss(self, latent_items_target):
-        conf_mat = (self.conf_a - self.conf_b) * self.ratings + self.conf_b * torch.ones_like(self.ratings)
+        conf_mat = self.conf_b * torch.ones(self.ratings.shape) + (self.conf_a - self.conf_b) * self.ratings
 
         loss_v = self.lambda_v * F.mse_loss(self.model.V, latent_items_target, reduction='sum') / 2
         loss_u = self.lambda_u * self.model.U.square().sum() / 2
-        loss_r = (conf_mat * (self.ratings - self.model.predict()).square()).sum() / 2
+        loss_r = (conf_mat * (self.model.predict() - self.ratings).square()).sum() / 2
 
         loss = loss_v + loss_u + loss_r
         logging.info(
