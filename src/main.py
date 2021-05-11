@@ -41,7 +41,6 @@ recon_losses = {
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
-    parser.add_argument('--device', default='cpu')
     parser.add_argument('--seed', type=int, default=1)
 
     parser.add_argument('--sdae_in')
@@ -84,7 +83,7 @@ if __name__ == '__main__':
     # Note: SDAE inputs and parameters will use the GPU if desired, but U and V
     # matrices of CDL do not go on the GPU (and therefore nor does the ratings
     # matrix).
-    device = args.device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
 
     logging.info('Loading content dataset')
