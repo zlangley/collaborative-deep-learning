@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch import autograd, linalg
 from torch.utils.data import DataLoader, TensorDataset
 
-import data
+from . import data
 
 
 # Since we use AdamW, we can rescale our losses with negligible effect on the optimization.

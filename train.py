@@ -4,42 +4,24 @@ import logging
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
-import data
-import evaluate
-from cdl import train_stacked_autoencoders, train_isolated_autoencoder, train_model
-from model import Autoencoder, StackedAutoencoder, LatentFactorModel
-
-
-def load_model(filename, sdae, lfm, map_location=None):
-    checkpoint = torch.load(filename, map_location=map_location)
-    sdae.load_state_dict(checkpoint['sdae'])
-    lfm.U = checkpoint['U']
-    lfm.V = checkpoint['V']
-
-
-def save_checkpoint(filename, sdae, lfm):
-    torch.save({
-        'sdae': sdae.cpu().state_dict(),
-        'U': lfm.U,
-        'V': lfm.V,
-    }, filename)
-
-
-sdae_activations = {
-    'relu': nn.ReLU(),
-    'sigmoid': nn.Sigmoid(),
-    'tanh': nn.Tanh(),
-}
-
-recon_losses = {
-    'mse': nn.MSELoss(),
-    'cross-entropy': nn.BCEWithLogitsLoss(),
-}
-
+from cdl import data
+from cdl.autoencoder import Autoencoder, StackedAutoencoder
+from cdl.cdl import train_stacked_autoencoders, train_isolated_autoencoder, train_model
+from cdl.lfm import LatentFactorModel
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
+    sdae_activations = {
+        'relu': nn.ReLU(),
+        'sigmoid': nn.Sigmoid(),
+        'tanh': nn.Tanh(),
+    }
+
+    recon_losses = {
+        'mse': nn.MSELoss(),
+        'cross-entropy': nn.BCEWithLogitsLoss(),
+    }
+
+    parser = argparse.ArgumentParser('Collaborative Deep Learning training')
     parser.add_argument('--seed', type=int, default=1)
 
     parser.add_argument('--embedding', choices=['bert', 'bow'], default='bert')
@@ -83,11 +65,7 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info(f'Loading content dataset ({args.embedding})')
-    if args.embedding == 'bert':
-        content_dataset = torch.load('data/processed/citeulike-a/content-bert.pt', map_location=device)
-    else:
-        content_dataset = torch.load('data/processed/citeulike-a/content-bag.pt', map_location=device).to_dense()
-
+    content_dataset = data.load_content_embeddings(use_bert=args.embedding == 'bert', device=device)
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
@@ -134,15 +112,9 @@ if __name__ == '__main__':
     train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
     logging.info(f'Saving model to {args.out}')
-    torch.save({
-        'autoencoder': sdae.state_dict(),
-        'latent_factor_model': lfm.state_dict(),
-    }, args.out)
-
-    logging.info(f'Predicting')
-    pred = lfm.predict()
+    data.save_model(sdae, lfm, args.out)
 
     logging.info(f'Calculating recall@{args.recall}')
-    recall = evaluate.recall(pred, ratings_test_dataset.to_dense(), args.recall)
+    recall = lfm.compute_recall(ratings_test_dataset.to_dense(), args.recall)
 
     print(f'recall@{args.recall}: {recall.item()}')

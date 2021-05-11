@@ -19,6 +19,14 @@ class LatentFactorModel:
     def state_dict(self):
         return {'U': self.U, 'V': self.V}
 
-    def load_state_dict(self, d):
+    def update_state_dict(self, d):
         self.U = d['U']
         self.V = d['V']
+        assert self.U.shape[1] == self.V.shape[1]
+        self.latent_size = self.U.shape[1]
+
+    def compute_recall(self, test, k):
+        _, indices = torch.topk(self.predict(), k)
+        gathered = test.gather(1, indices)
+        recall = gathered.sum(dim=1) / test.sum(dim=1)
+        return recall.mean()

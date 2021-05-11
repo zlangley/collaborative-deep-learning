@@ -1,5 +1,8 @@
 train:
-	python src/main.py -v
+	python train.py -v
+
+infer:
+	python infer.py
 
 features: clean bert bow mult
 
