@@ -71,16 +71,9 @@ class LatentFactorModelOptimizer:
         # where W is the submatrix restricted to rows j with R_ij != 0.
         # Since W will be *much* smaller than V, it is much more efficient to
         # first extract this submatrix.
+        U, V, conf_a, conf_b = self.model.U, self.model.V, self.conf_a, self.conf_b
 
-        U = self.model.U
-        V = self.model.V
-
-        conf_a = self.conf_a
-        conf_b = self.conf_b
-
-        latent_size = self.model.latent_size
-
-        A_base = conf_b * V.t() @ V + self.lambda_u * torch.eye(latent_size)
+        A_base = conf_b * V.t() @ V + self.lambda_u * torch.eye(self.model.latent_size)
         for j in range(len(U)):
             rated_idx = self._ratings_nonzero_rows[j]
             W = V[rated_idx, :]
@@ -92,18 +85,10 @@ class LatentFactorModelOptimizer:
 
     def step_items(self, latent_items_target):
         """Minimize the loss holding all but the latent items matrix constant."""
-
+        U, V, conf_a, conf_b = self.model.U, self.model.V, self.conf_a, self.conf_b
         latent_items_target = latent_items_target * self.lambda_v
 
-        U = self.model.U
-        V = self.model.V
-
-        conf_a = self.conf_a
-        conf_b = self.conf_b
-
-        latent_size = self.model.latent_size
-
-        A_base = conf_b * U.t() @ U + self.lambda_v * torch.eye(latent_size)
+        A_base = conf_b * U.t() @ U + self.lambda_v * torch.eye(self.model.latent_size)
         for j in range(len(V)):
             rated_idx = self._ratings_nonzero_cols[j]
             if len(rated_idx) == 0:
