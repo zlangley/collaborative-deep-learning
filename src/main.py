@@ -83,7 +83,7 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info('Loading content dataset')
-    content_dataset = torch.load('data/processed/citeulike-a/content.pt', map_location=device).to_dense()
+    content_dataset = torch.load('data/processed/citeulike-a/bow-content.pt', map_location=device).to_dense()
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 

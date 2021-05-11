@@ -4,7 +4,7 @@ import torch
 import torch.cuda
 import torch.nn.functional as F
 from torch import autograd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 import cdl
 import data
@@ -90,7 +90,7 @@ def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_s
 def train_cdl_autoencoder(autoencoder, content, latent_items, corruption, batch_size, recon_loss_fn, latent_loss_fn, optimizer):
     # Input to autoencoder is add_noise(item); target is (latent_item, item).
     dataset = data.TransformDataset(
-        torch.utils.data.TensorDataset(latent_items, content),
+        TensorDataset(latent_items, content),
         lambda x: (F.dropout(x[1], corruption), x),
     )
 
