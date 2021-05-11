@@ -6,6 +6,10 @@ and Yeung.  In contrast to the experiment presented in the paper, here we
 explore using BERT to embed the content rather than the bag-of-words
 representation.
 
+The default hyperparameters---the best ones we found---achieve 25.3% recall@300
+for the bag-of-words embedding. The same exact hyperparameters achieve 31.5%
+recall@300 by simply switching to use the BERT embedding.
+
 ## Installation
 
 The project was developed using Python 3.8. After setting up your Python 3.8
