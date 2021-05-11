@@ -43,6 +43,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('--seed', type=int, default=1)
 
+    parser.add_argument('--embedding', choices=['bert', 'bow'], default='bert')
     parser.add_argument('--recall', type=int, default=300)
     parser.add_argument('--out', default='model.pt')
 
@@ -82,8 +83,11 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
 
-    logging.info('Loading content dataset')
-    content_dataset = torch.load('data/processed/citeulike-a/bow-content.pt', map_location=device).to_dense()
+    logging.info(f'Loading content dataset ({args.embedding})')
+    if args.embedding == 'bert':
+        content_dataset = torch.load('data/processed/citeulike-a/content-bert.pt', map_location=device)
+    else:
+        content_dataset = torch.load('data/processed/citeulike-a/content-bag.pt', map_location=device).to_dense()
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
