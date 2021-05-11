@@ -1,4 +1,3 @@
-import scipy.io
 import torch
 
 
