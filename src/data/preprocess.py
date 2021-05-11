@@ -15,15 +15,15 @@ def preprocess_content():
                 indices[1].append(word_id)
                 values.append(cnt)
 
-    x = torch.sparse_coo_tensor(indices, values, dtype=torch.float32).to_dense()
+    x = torch.sparse_coo_tensor(indices, values, (16980, 8000), dtype=torch.float32).to_dense()
 
     maxes, _ = x.max(dim=1, keepdim=True)
     x /= maxes
 
-    torch.save(x, 'data/processed/citeulike-a/content.pt')
+    torch.save(x.to_sparse(), 'data/processed/citeulike-a/content.pt')
 
 
-def preprocess_ratings_file(filename):
+def preprocess_ratings_file(filename, shape):
     indices = [[], []]
 
     with open(f'data/raw/citeulike-a/{filename}') as f:
@@ -36,7 +36,7 @@ def preprocess_ratings_file(filename):
 
     values = [1] * len(indices[0])
 
-    x = torch.sparse_coo_tensor(indices, values, dtype=torch.float32).to_dense()
+    x = torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32)
     torch.save(x, f'data/processed/citeulike-a/{filename}')
 
 
@@ -45,5 +45,5 @@ if __name__ == '__main__':
 
     for a in ['train', 'test']:
         for b in [1, 10]:
-            for c in ['users', 'items']:
-                preprocess_ratings_file(f'cf-{a}-{b}-{c}.dat')
+            for c, shape in [('users', (5551, 16980)), ('items', (16980, 5551))]:
+                preprocess_ratings_file(f'cf-{a}-{b}-{c}.dat', shape)
