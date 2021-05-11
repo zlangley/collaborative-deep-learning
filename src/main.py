@@ -19,7 +19,7 @@ def load_model(filename, sdae, lfm, map_location=None):
     lfm.V = checkpoint['V']
 
 
-def save_model(filename, sdae, lfm):
+def save_checkpoint(filename, sdae, lfm):
     torch.save({
         'sdae': sdae.cpu().state_dict(),
         'U': lfm.U,
@@ -43,12 +43,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Collaborative Deep Learning implementation.')
     parser.add_argument('--seed', type=int, default=1)
 
-    parser.add_argument('--sdae_in')
-    parser.add_argument('--sdae_out', default='sdae.pt')
-    parser.add_argument('--cdl_in')
-    parser.add_argument('--cdl_out', default='cdl.pt')
-
     parser.add_argument('--recall', type=int, default=300)
+    parser.add_argument('--out', default='model.pt')
 
     parser.add_argument('--conf_a', type=float, default=1.0)
     parser.add_argument('--conf_b', type=float, default=0.01)
@@ -105,12 +101,12 @@ if __name__ == '__main__':
         'dropout': args.dropout,
         'corruption': args.corruption,
     }
+
     recon_loss_fn = recon_losses[args.recon_loss]
+    activation = sdae_activations[args.activation]
 
     layer_sizes = [in_features] + args.hidden_sizes + [args.latent_size]
     logging.info(f'Using autoencoder architecture {"x".join(map(str, layer_sizes))}')
-
-    activation = sdae_activations[args.activation]
 
     autoencoders = [
         Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True)
@@ -119,42 +115,25 @@ if __name__ == '__main__':
     sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
     sdae.to(device)
 
-    lfm = LatentFactorModel(
-        target_shape=ratings_training_dataset.shape,
-        latent_size=args.latent_size,
-    )
+    lfm = LatentFactorModel(target_shape=ratings_training_dataset.shape, latent_size=args.latent_size)
 
     logging.info(f'Config: {config}')
     optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
 
-    if args.cdl_in:
-        logging.info(f'Loading model from {args.cdl_in}')
-        load_model(args.cdl_in, sdae, lfm)
+    content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
-    else:
-        if args.sdae_in:
-            logging.info(f'Loading pre-trained SDAE from {args.sdae_in}')
-            sdae.load_state_dict(torch.load(args.sdae_in))
-            sdae.train()
-            sdae.to(device)
+    logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
+    train_stacked_autoencoders(autoencoders, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
+    train_isolated_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
 
-        else:
-            content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
+    logging.info(f'Training with recon loss {args.recon_loss}')
+    train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
-            logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-            train_stacked_autoencoders(autoencoders, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
-            train_isolated_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
-
-            logging.info(f'Saving pretrained SDAE to {args.sdae_out}.')
-            torch.save(sdae.state_dict(), args.sdae_out)
-
-        logging.info(f'Training with recon loss {args.recon_loss}')
-        recon_loss_fn = recon_losses[args.recon_loss]
-
-        train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
-
-        logging.info(f'Saving model to {args.cdl_out}')
-        save_model(args.cdl_out, sdae, lfm)
+    logging.info(f'Saving model to {args.out}')
+    torch.save({
+        'autoencoder': sdae.state_dict(),
+        'latent_factor_model': lfm.state_dict(),
+    }, args.out)
 
     logging.info(f'Predicting')
     pred = lfm.predict()

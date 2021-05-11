@@ -25,6 +25,13 @@ class LatentFactorModel:
     def predict(self):
         return self.U @ self.V.t()
 
+    def state_dict(self):
+        return {'U': self.U, 'V': self.V}
+
+    def load_state_dict(self, d):
+        self.U = d['U']
+        self.V = d['V']
+
 
 class LatentFactorModelOptimizer:
     """
