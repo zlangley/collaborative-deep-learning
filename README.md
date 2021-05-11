@@ -25,7 +25,10 @@ source code expects, you can run
 ```
 make features
 ```
-which will read from `data/raw/` and write to `data/processed/`.
+which will read from `data/raw/` and write to `data/processed/`. Note that
+`make features` may take a long time to run as it will download a BERT
+pre-trained model and then embed every document with that model. In
+computing the embeddings, having a GPU helps signficiantly.
 
 ## Training and Inference
 
