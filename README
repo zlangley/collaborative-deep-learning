@@ -1,21 +1,20 @@
 To install:
 ```
-conda env create -f environment.yml -n cdl
+pip install -r requirements.txt
 ```
 
-To pretrain:
+To prep data:
 ```
-python main.py pretrain_sdae
-```
-
-To train:
-```
-python main.py train
+make process_dataa
 ```
 
-To evaluate:
+To train and evaulate:
 ```
-python main.py predict
+make train
 ```
 
-Many parameters are customizable throught command-line arguments. See main.py.
+Many parameters are customizable throught command-line arguments if you run
+main.py directly. For example, you can run:
+```
+python src/main.py -v --lambda_u 1 --lambda_n 1000 --hidden_sizes 1000 200 --activation relu
+```
