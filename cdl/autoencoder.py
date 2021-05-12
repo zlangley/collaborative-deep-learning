@@ -9,9 +9,6 @@ class StackedAutoencoder(nn.Module):
 
         self.stack = nn.ModuleList(autoencoder_stack)
 
-        self.weights = [weight for ae in autoencoder_stack for weight in ae.weights]
-        self.biases = [bias for ae in autoencoder_stack for bias in ae.biases]
-
     def forward(self, x):
         latent = self.encode(x)
         reconstructed = self.decode(latent)
@@ -52,10 +49,8 @@ class Autoencoder(nn.Module):
         self._weight_enc = nn.Parameter(torch.Tensor(latent_size, in_features))
 
         if tie_weights:
-            self.weights = [self._weight_enc]
             self._weight_dec = nn.Parameter(self._weight_enc.t())
         else:
-            self.weights = [self._weight_enc, self._weight_dec]
             self._weight_dec = nn.Parameter(torch.Tensor(in_features, latent_size))
 
         self._bias_enc = nn.Parameter(torch.Tensor(latent_size))
@@ -68,8 +63,6 @@ class Autoencoder(nn.Module):
         nn.init.xavier_normal_(self._weight_dec)
         nn.init.zeros_(self._bias_enc)
         nn.init.zeros_(self._bias_dec)
-
-        self.biases = [self._bias_enc, self._bias_dec]
 
     def forward(self, x):
         latent = self.encode(x)
