@@ -21,7 +21,7 @@ def random_subset(x, k):
 def load_content_embeddings(embedding, device=None):
     x = torch.load(f'data/processed/citeulike-a/content-{embedding}.pt', map_location=device)
 
-    if embedding == 'bow':
+    if x.is_sparse:
         x = x.to_dense()
 
     return x
