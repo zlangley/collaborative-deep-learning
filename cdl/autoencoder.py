@@ -1,32 +1,13 @@
+import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 class StackedAutoencoder(nn.Module):
     def __init__(self, autoencoder_stack):
         super().__init__()
 
-        encoder_modules = []
-        decoder_modules = []
-
-        for autoencoder in autoencoder_stack[:-1]:
-            encoder_modules.append(autoencoder._encode)
-            encoder_modules.append(autoencoder._activation)
-            encoder_modules.append(autoencoder._dropout)
-
-        encoder_modules.append(autoencoder_stack[-1]._encode)
-        encoder_modules.append(autoencoder_stack[-1]._activation)
-        # Encoding ends after activation but before dropout.
-
-        decoder_modules.append(autoencoder_stack[-1]._dropout)
-        decoder_modules.append(autoencoder_stack[-1]._decode)
-
-        for autoencoder in reversed(autoencoder_stack[:-1]):
-            decoder_modules.append(autoencoder._activation)
-            decoder_modules.append(autoencoder._dropout)
-            decoder_modules.append(autoencoder._decode)
-
-        self.encode = nn.Sequential(*encoder_modules)
-        self.decode = nn.Sequential(*decoder_modules)
+        self.stack = nn.ModuleList(autoencoder_stack)
 
         self.weights = [weight for ae in autoencoder_stack for weight in ae.weights]
         self.biases = [bias for ae in autoencoder_stack for bias in ae.biases]
@@ -35,6 +16,24 @@ class StackedAutoencoder(nn.Module):
         latent = self.encode(x)
         reconstructed = self.decode(latent)
         return latent, reconstructed
+
+    def encode(self, x):
+        for i, ae in enumerate(self.stack):
+            x = ae.encode(x)
+
+            if i != len(self.stack) - 1:
+                x = ae._dropout(x)
+
+        return x
+
+    def decode(self, x):
+        for i, ae in enumerate(reversed(self.stack)):
+            if i != 0:
+                x = ae._activation(x)
+
+            x = ae.decode(x)
+
+        return x
 
 
 class Autoencoder(nn.Module):
@@ -50,29 +49,39 @@ class Autoencoder(nn.Module):
         """
         super().__init__()
 
-        self._encode = nn.Linear(in_features, latent_size)
-        self._decode = nn.Linear(latent_size, in_features)
+        self._weight_enc = nn.Parameter(torch.Tensor(latent_size, in_features))
+
+        if tie_weights:
+            self.weights = [self._weight_enc]
+            self._weight_dec = nn.Parameter(self._weight_enc.t())
+        else:
+            self.weights = [self._weight_enc, self._weight_dec]
+            self._weight_dec = nn.Parameter(torch.Tensor(in_features, latent_size))
+
+        self._bias_enc = nn.Parameter(torch.Tensor(latent_size))
+        self._bias_dec = nn.Parameter(torch.Tensor(in_features))
+
         self._activation = activation
         self._dropout = nn.Dropout(dropout)
 
-        if tie_weights:
-            self._decode.weight.data = self._encode.weight.t()
-            self.weights = [self._encode.weight]
-        else:
-            self.weights = [self._encode.weight, self._decode.weight]
+        nn.init.xavier_normal_(self._weight_enc)
+        nn.init.xavier_normal_(self._weight_dec)
+        nn.init.zeros_(self._bias_enc)
+        nn.init.zeros_(self._bias_dec)
 
-        self.biases = [self._encode.bias.data, self._decode.bias.data]
-
-        for weight in self.weights:
-            nn.init.xavier_uniform_(weight)
-
-        for bias in self.biases:
-            nn.init.zeros_(bias)
-
-        self.encode = nn.Sequential(self._encode, self._activation)
-        self.decode = nn.Sequential(self._dropout, self._decode)
+        self.biases = [self._bias_enc, self._bias_dec]
 
     def forward(self, x):
         latent = self.encode(x)
         reconstructed = self.decode(latent)
         return latent, reconstructed
+
+    def encode(self, x):
+        x = F.linear(x, self._weight_enc, self._bias_enc)
+        x = self._activation(x)
+        return x
+
+    def decode(self, x):
+        x = self._dropout(x)
+        x = F.linear(x, self._weight_dec, self._bias_dec)
+        return x
