@@ -18,8 +18,8 @@ def random_subset(x, k):
     return torch.utils.data.Subset(x, idx)
 
 
-def load_content_embeddings(embedding, device=None):
-    x = torch.load(f'data/processed/citeulike-a/content-{embedding}.pt', map_location=device)
+def load_content_embeddings(dataset_name, embedding, device=None):
+    x = torch.load(f'data/processed/{dataset_name}/content-{embedding}.pt', map_location=device)
 
     if x.is_sparse:
         x = x.to_dense()
@@ -27,12 +27,12 @@ def load_content_embeddings(embedding, device=None):
     return x
 
 
-def load_cf_train_data():
-    return torch.load('data/processed/citeulike-a/cf-train-1-users.pt')
+def load_cf_train_data(dataset_name):
+    return torch.load(f'data/processed/{dataset_name}/cf-train-1.pt')
 
 
-def load_cf_test_data():
-    return torch.load('data/processed/citeulike-a/cf-test-1-users.pt')
+def load_cf_test_data(dataset_name):
+    return torch.load(f'data/processed/{dataset_name}/cf-test-1.pt')
 
 
 def save_model(sdae, lfm, filename):

@@ -18,6 +18,7 @@ def compute_bow(infile, outfile, shape):
     x = torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32).to_dense()
 
     maxes, _ = x.max(dim=1, keepdim=True)
+    torch.clamp_min_(maxes, 1)
     x /= maxes
 
     torch.save(x.to_sparse(), outfile)

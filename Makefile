@@ -17,5 +17,5 @@ bert:
 bow:
 	python scripts/compute_bow.py
 
-mult:
-	python scripts/transform_mult.py
+relationships:
+	python scripts/compute_relationships.py

@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1)
 
     parser.add_argument('--embedding', choices=['bert', 'bow'], default='bert')
+    parser.add_argument('--dataset', choices=['citeulike-a', 'citeulike-t'], default='citeulike-a')
     parser.add_argument('--recall', type=int, default=300)
     parser.add_argument('--out', default='model.pt')
 
@@ -66,13 +67,13 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info(f'Loading content dataset ({args.embedding})')
-    content_dataset = data.load_content_embeddings(args.embedding, device=device)
+    content_dataset = data.load_content_embeddings(args.dataset, args.embedding, device=device)
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 
     logging.info('Loading ratings datasets')
-    ratings_training_dataset = torch.load('data/processed/citeulike-a/cf-train-1-users.pt')
-    ratings_test_dataset = torch.load('data/processed/citeulike-a/cf-test-1-users.pt')
+    ratings_training_dataset = data.load_cf_train_data(args.dataset)
+    ratings_test_dataset = data.load_cf_test_data(args.dataset)
 
     config = {
         'conf_a': args.conf_a,
