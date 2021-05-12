@@ -47,7 +47,7 @@ if __name__ == '__main__':
     parser.add_argument('--corruption', type=float, default=0.3)
     parser.add_argument('--activation', choices=sdae_activations.keys(), default='sigmoid')
     parser.add_argument('--recon_loss', choices=recon_losses.keys(), default='mse')
-    parser.add_argument('--hidden_sizes', nargs='+', type=int, default=[200])
+    parser.add_argument('--hidden_sizes', nargs='*', type=int, default=[200])
     parser.add_argument('--latent_size', type=int, default=50)
 
     parser.add_argument('-v', '--verbose', action='store_true')
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     logging.info(f'Using device {device}')
 
     logging.info(f'Loading content dataset ({args.embedding})')
-    content_dataset = data.load_content_embeddings(use_bert=args.embedding == 'bert', device=device)
+    content_dataset = data.load_content_embeddings(args.embedding, device=device)
     num_items, in_features = content_dataset.shape
     # content_dataset.shape: (16980, 8000)
 

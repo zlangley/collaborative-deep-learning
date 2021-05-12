@@ -18,11 +18,13 @@ def random_subset(x, k):
     return torch.utils.data.Subset(x, idx)
 
 
-def load_content_embeddings(use_bert=True, device=None):
-    if use_bert:
-        return torch.load('data/processed/citeulike-a/content-bert.pt', map_location=device)
-    else:
-        return torch.load('data/processed/citeulike-a/content-bow.pt', map_location=device).to_dense()
+def load_content_embeddings(embedding, device=None):
+    x = torch.load(f'data/processed/citeulike-a/content-{embedding}.pt', map_location=device)
+
+    if embedding == 'bow':
+        x = x.to_dense()
+
+    return x
 
 
 def load_cf_train_data():
