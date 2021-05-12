@@ -4,9 +4,10 @@ import logging
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 from cdl import data
 from cdl.autoencoder import Autoencoder, StackedAutoencoder
-from cdl.cdl import train_stacked_autoencoders, train_isolated_autoencoder, train_model
+from cdl.cdl import train_model, train_stacked_autoencoder
 from cdl.lfm import LatentFactorModel
 
 if __name__ == '__main__':
@@ -94,7 +95,7 @@ if __name__ == '__main__':
         Autoencoder(in_features, out_features, args.dropout, activation, tie_weights=True)
         for in_features, out_features in zip(layer_sizes, layer_sizes[1:])
     ]
-    sdae = StackedAutoencoder(autoencoder_stack=autoencoders)
+    sdae = StackedAutoencoder(autoencoders)
     sdae.to(device)
 
     lfm = LatentFactorModel(target_shape=ratings_training_dataset.shape, latent_size=args.latent_size)
@@ -105,8 +106,7 @@ if __name__ == '__main__':
     content_training_dataset = data.random_subset(content_dataset, int(num_items * 0.8))
 
     logging.info(f'Pretraining SDAE with {args.recon_loss} loss')
-    train_stacked_autoencoders(autoencoders, args.corruption, content_training_dataset, optimizer, recon_loss_fn, epochs=args.pretrain_epochs, batch_size=args.batch_size)
-    train_isolated_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
+    train_stacked_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
 
     logging.info(f'Training with recon loss {args.recon_loss}')
     train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)

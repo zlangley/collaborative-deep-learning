@@ -2,10 +2,10 @@ from torch import nn
 
 
 class StackedAutoencoder(nn.Module):
-    def __init__(self, autoencoder_stack):
+    def __init__(self, autoencoders):
         super().__init__()
 
-        self.stack = nn.ModuleList(autoencoder_stack)
+        self.autoencoders = nn.ModuleList(autoencoders)
 
     def forward(self, x):
         latent = self.encode(x)
@@ -13,16 +13,16 @@ class StackedAutoencoder(nn.Module):
         return latent, reconstructed
 
     def encode(self, x):
-        for i, ae in enumerate(self.stack):
+        for i, ae in enumerate(self.autoencoders):
             x = ae.encode(x)
 
-            if i != len(self.stack) - 1:
+            if i != len(self.autoencoders) - 1:
                 x = ae.dropout(x)
 
         return x
 
     def decode(self, x):
-        for i, ae in enumerate(reversed(self.stack)):
+        for i, ae in enumerate(reversed(self.autoencoders)):
             if i != 0:
                 x = ae.activation(x)
 

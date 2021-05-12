@@ -151,12 +151,12 @@ class LatentFactorModelOptimizer:
         return loss
 
 
-def train_stacked_autoencoders(autoencoders, corruption, dataset, optimizer, loss_fn, epochs, batch_size):
+def train_stacked_autoencoder(stacked_autoencoder, dataset, corruption, epochs, batch_size, loss_fn, optimizer):
     cur_dataset = dataset
 
     # Layer-wise pretraining.
-    for i, autoencoder in enumerate(autoencoders):
-        logging.info(f'Training autoencoder {i + 1}/{len(autoencoders)}')
+    for i, autoencoder in enumerate(stacked_autoencoder.autoencoders):
+        logging.info(f'Training autoencoder {i + 1}/{len(stacked_autoencoder.autoencoders)}')
 
         train_isolated_autoencoder(autoencoder, cur_dataset, corruption, epochs, batch_size, loss_fn, optimizer)
 
@@ -164,6 +164,9 @@ def train_stacked_autoencoders(autoencoders, corruption, dataset, optimizer, los
             autoencoder.eval()
             cur_dataset = autoencoder.encode(cur_dataset[:])
             autoencoder.train()
+
+    # Fine-tuning.
+    train_isolated_autoencoder(stacked_autoencoder, dataset, corruption, epochs, batch_size, loss_fn, optimizer)
 
 
 def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_size, loss_fn, optimizer):
