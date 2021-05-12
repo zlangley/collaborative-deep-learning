@@ -1,3 +1,5 @@
+import sys
+
 import torch
 
 
@@ -25,5 +27,9 @@ def compute_bow(infile, outfile, shape):
 
 
 if __name__ == '__main__':
-    compute_bow('data/raw/citeulike-a/mult.dat', 'data/processed/citeulike-a/content-bow.pt', (16980, 8000))
-    compute_bow('data/raw/citeulike-t/mult.dat', 'data/processed/citeulike-t/content-bow.pt', (25975, 20000))
+    dataset_name = sys.argv[1]
+    shape = {
+        'citeulike-a': (16980, 8000),
+        'citeulike-t': (25975, 20000),
+    }
+    compute_bow(f'data/raw/{dataset_name}/mult.dat', f'data/processed/{dataset_name}/content-bow.pt', shape[dataset_name])

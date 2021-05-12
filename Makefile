@@ -4,18 +4,28 @@ train:
 infer:
 	python infer.py
 
-features: clean bert bow mult
+citeulike-a: clean bow-citeulike-a relationships-citeulike-a bert-citeulike-a
+citeulike-t: clean bow-citeulike-t relationships-citeulike-t bert-citeulike-t
 
 clean:
 	rm -rf data/processed
 	mkdir -p data/processed/citeulike-a
 	mkdir -p data/processed/citeulike-t
 
-bert:
-	python scripts/compute_bert.py
+bert-citeulike-a:
+	python scripts/compute_bert.py citeulike-a
 
-bow:
-	python scripts/compute_bow.py
+bert-citeulike-t:
+	python scripts/compute_bert.py citeulike-t
 
-relationships:
-	python scripts/compute_relationships.py
+bow-citeulike-a:
+	python scripts/compute_bow.py citeulike-a
+
+bow-citeulike-t:
+	python scripts/compute_bow.py citeulike-t
+
+relationships-citeulike-a:
+	python scripts/compute_relationships.py citeulike-a
+
+relationships-citeulike-t:
+	python scripts/compute_relationships.py citeulike-t

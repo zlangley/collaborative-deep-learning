@@ -1,4 +1,5 @@
 import os
+import sys
 
 import torch
 
@@ -22,7 +23,13 @@ def transform_file(dataset, filename_base, shape):
 
 
 if __name__ == '__main__':
+    dataset_name = sys.argv[1]
+
+    shape = {
+        'citeulike-a': (5551, 16980),
+        'citeulike-t': (7947, 25975),
+    }
+
     for a in ['train', 'test']:
         for b in [1, 10]:
-            transform_file('citeulike-a', f'cf-{a}-{b}', (5551, 16980))
-            transform_file('citeulike-t', f'cf-{a}-{b}', (7947, 25975))
+            transform_file(dataset_name, f'cf-{a}-{b}', shape[dataset_name])
