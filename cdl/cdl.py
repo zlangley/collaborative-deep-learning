@@ -37,7 +37,7 @@ def train_model(sdae, mfm, content, ratings, optimizer, recon_loss_fn, config, e
             # Don't use dropout here.
             sdae.eval()
             latent_items_target, recon = sdae(content)
-            latent_items_target = latent_items_target.cpu()
+            latent_items_target = latent_items_target.detach().cpu()
             sdae.train()
 
         mfm_optim.step(latent_items_target)
@@ -52,7 +52,7 @@ def train_model(sdae, mfm, content, ratings, optimizer, recon_loss_fn, config, e
         train_cdl_autoencoder(sdae, content, mfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
-    latent_items_target = sdae.encode(content).cpu()
+    latent_items_target = sdae.encode(content).detach().cpu()
 
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
