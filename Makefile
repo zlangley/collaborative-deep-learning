@@ -4,12 +4,16 @@ train:
 infer:
 	python infer.py
 
-citeulike-a: clean bow-citeulike-a relationships-citeulike-a bert-citeulike-a
-citeulike-t: clean bow-citeulike-t relationships-citeulike-t bert-citeulike-t
+citeulike-a: mkdir-citeulike-a bow-citeulike-a relationships-citeulike-a bert-citeulike-a
+citeulike-t: mkdir-citeulike-t bow-citeulike-t relationships-citeulike-t bert-citeulike-t
 
 clean:
 	rm -rf data/processed
+
+mkdir-citeulike-a:
 	mkdir -p data/processed/citeulike-a
+
+mkdir-citeulike-t:
 	mkdir -p data/processed/citeulike-t
 
 bert-citeulike-a:
