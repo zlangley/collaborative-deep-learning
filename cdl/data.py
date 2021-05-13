@@ -18,6 +18,11 @@ def random_subset(x, k):
     return torch.utils.data.Subset(x, idx)
 
 
+def bernoulli_corrupt(x, p):
+    mask = torch.rand_like(x) > p
+    return x * mask
+
+
 def load_content_embeddings(dataset_name, embedding, device=None):
     x = torch.load(f'data/processed/{dataset_name}/content-{embedding}.pt', map_location=device)
 

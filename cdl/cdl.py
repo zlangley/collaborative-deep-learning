@@ -175,7 +175,7 @@ def train_isolated_autoencoder(autoencoder, content, corruption, epochs, batch_s
 
         dataset = data.TransformDataset(
             content,
-            lambda x: (F.dropout(x, corruption), x),
+            lambda x: (data.bernoulli_corrupt(x, corruption), x),
         )
         train(lambda x: autoencoder(x)[1], dataset, loss_fn, batch_size, optimizer)
 
@@ -184,7 +184,7 @@ def train_cdl_autoencoder(autoencoder, content, latent_items, corruption, batch_
     # Input to autoencoder is add_noise(item); target is (latent_item, item).
     dataset = data.TransformDataset(
         TensorDataset(latent_items, content),
-        lambda x: (F.dropout(x[1], corruption), x),
+        lambda x: (data.bernoulli_corrupt(x[1], corruption), x),
     )
 
     def loss_fn(pred, target):
