@@ -3,4 +3,5 @@ __pycache__/
 venv/
 *.pt
 .DS_Store
+.ipynb_checkpoints/
 data/processed

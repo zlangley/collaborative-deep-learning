@@ -37,7 +37,7 @@ def train_model(sdae, mfm, content, ratings, optimizer, recon_loss_fn, config, e
             # Don't use dropout here.
             sdae.eval()
             latent_items_target, recon = sdae(content)
-            latent_items_target = latent_items_target.detach().cpu()
+            latent_items_target = latent_items_target.cpu()
             sdae.train()
 
         mfm_optim.step(latent_items_target)
@@ -51,8 +51,9 @@ def train_model(sdae, mfm, content, ratings, optimizer, recon_loss_fn, config, e
         # Update SDAE weights. Loss here only depends on SDAE outputs.
         train_cdl_autoencoder(sdae, content, mfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
-    sdae.eval()
-    latent_items_target = sdae.encode(content).detach().cpu()
+    with autograd.no_grad():
+        sdae.eval()
+        latent_items_target = sdae.encode(content).cpu()
 
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
@@ -113,7 +114,7 @@ class MatrixFactorizationModelOptimizer:
             # R[j, rated_idx] is just an all-ones vector
             b = conf_a * W.t().sum(dim=1)
 
-            U[j] = linalg.solve(A, b)
+            linalg.solve(A, b, out=U[j].unsqueeze(1))
 
     def step_items(self, latent_items_target):
         """Minimize the loss holding all but the latent items matrix constant."""
@@ -132,7 +133,7 @@ class MatrixFactorizationModelOptimizer:
                 # R[rated_idx, j] is just an all-ones vector
                 b = conf_a * W.t().sum(dim=1) + latent_items_target[j]
 
-            V[j] = linalg.solve(A, b)
+            linalg.solve(A, b, out=V[j].unsqueeze(1))
 
     def loss(self, latent_items_target):
         conf_mat = self.conf_b * torch.ones(self.ratings.shape) + (self.conf_a - self.conf_b) * self.ratings
