@@ -40,18 +40,18 @@ def load_cf_test_data(dataset_name):
     return torch.load(f'data/processed/{dataset_name}/cf-test-1.pt')
 
 
-def save_model(sdae, lfm, filename):
+def save_model(sdae, mfm, filename):
     torch.save({
         'autoencoder': sdae.state_dict(),
-        'latent_factor_model': lfm.state_dict(),
+        'matrix_factorization_model': mfm.state_dict(),
     }, filename)
 
 
-def load_model(sdae, lfm, filename):
+def load_model(sdae, mfm, filename):
     d = torch.load(filename)
 
     if sdae is not None:
         sdae.update_state_dict(d['autoencoder'])
 
-    if lfm is not None:
-        lfm.update_state_dict(d['latent_factor_model'])
+    if mfm is not None:
+        mfm.update_state_dict(d['matrix_factorization_model'])

@@ -8,7 +8,7 @@ import torch.optim as optim
 from cdl import data
 from cdl.autoencoder import Autoencoder, StackedAutoencoder
 from cdl.cdl import train_model, train_stacked_autoencoder
-from cdl.lfm import LatentFactorModel
+from cdl.mf import MatrixFactorizationModel
 
 if __name__ == '__main__':
     sdae_activations = {
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     sdae = StackedAutoencoder(autoencoders)
     sdae.to(device)
 
-    lfm = LatentFactorModel(target_shape=ratings_training_dataset.shape, latent_size=args.latent_size)
+    mfm = MatrixFactorizationModel(target_shape=ratings_training_dataset.shape, latent_size=args.latent_size)
 
     logging.info(f'Config: {config}')
     optimizer = optim.AdamW(sdae.parameters(), lr=args.lr, weight_decay=args.lambda_w)
@@ -110,12 +110,12 @@ if __name__ == '__main__':
     train_stacked_autoencoder(sdae, content_training_dataset, args.corruption, args.pretrain_epochs, args.batch_size, recon_loss_fn, optimizer)
 
     logging.info(f'Training with recon loss {args.recon_loss}')
-    train_model(sdae, lfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
+    train_model(sdae, mfm, content_dataset, ratings_training_dataset, optimizer, recon_loss_fn, config, epochs=args.epochs, batch_size=args.batch_size, device=device)
 
     logging.info(f'Saving model to {args.out}')
-    data.save_model(sdae, lfm, args.out)
+    data.save_model(sdae, mfm, args.out)
 
     logging.info(f'Calculating recall@{args.recall}')
-    recall = lfm.compute_recall(ratings_test_dataset.to_dense(), args.recall)
+    recall = mfm.compute_recall(ratings_test_dataset.to_dense(), args.recall)
 
     print(f'recall@{args.recall}: {recall.item()}')

@@ -15,7 +15,7 @@ def AutoencoderLatentLoss(lambda_v, lambda_n):
     return lambda pred, target: lambda_v / lambda_n * F.mse_loss(pred, target)
 
 
-def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10):
+def train_model(sdae, mfm, content, ratings, optimizer, recon_loss_fn, config, epochs, batch_size, device=None, max_iters=10):
     """
     Trains the CDL model. For best results, the SDAE should be pre-trained.
 
@@ -26,7 +26,7 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
     In the last step, we batch the input and update W+ and b on each batch with
     one step of a gradient-based iterative algorithm.
     """
-    lfm_optim = LatentFactorModelOptimizer(lfm, ratings, config['conf_a'], config['conf_b'], config['lambda_u'], config['lambda_v'])
+    mfm_optim = MatrixFactorizationModelOptimizer(mfm, ratings, config['conf_a'], config['conf_b'], config['lambda_u'], config['lambda_v'])
     latent_loss_fn = AutoencoderLatentLoss(config['lambda_v'], config['lambda_n'])
 
     for epoch in range(epochs):
@@ -40,16 +40,16 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
             latent_items_target = latent_items_target.cpu()
             sdae.train()
 
-        lfm_optim.step(latent_items_target)
+        mfm_optim.step(latent_items_target)
 
         if epoch % 3 == 0:
-            loss = lfm_optim.loss(latent_items_target).item()
+            loss = mfm_optim.loss(latent_items_target).item()
             loss += config['lambda_n'] / 2 * F.mse_loss(recon, content, reduction='sum').item()
             loss += config['lambda_w'] / 2 * sum(p.square().sum() for p in sdae.parameters()).item()
             logging.info(f'  neg_likelihood: {loss}')
 
         # Update SDAE weights. Loss here only depends on SDAE outputs.
-        train_cdl_autoencoder(sdae, content, lfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)
+        train_cdl_autoencoder(sdae, content, mfm.V.to(device), config['corruption'], batch_size, recon_loss_fn, latent_loss_fn, optimizer)
 
     sdae.eval()
     latent_items_target = sdae.encode(content).cpu()
@@ -57,15 +57,15 @@ def train_model(sdae, lfm, content, ratings, optimizer, recon_loss_fn, config, e
     # Now optimize U and V completely holding the SDAE latent layer fixed.
     prev_loss = None
     for i in range(max_iters):
-        lfm_optim.step(latent_items_target)
-        loss = lfm_optim.loss(latent_items_target)
+        mfm_optim.step(latent_items_target)
+        loss = mfm_optim.loss(latent_items_target)
         if prev_loss is not None and (prev_loss - loss) / loss < 1e-4:
             break
 
         prev_loss = loss
 
 
-class LatentFactorModelOptimizer:
+class MatrixFactorizationModelOptimizer:
     """
     Computes latent user and latent item representations given a ratings target and a latent item representation target.
     """
@@ -139,11 +139,11 @@ class LatentFactorModelOptimizer:
 
         loss_v = self.lambda_v * F.mse_loss(self.model.V, latent_items_target, reduction='sum') / 2
         loss_u = self.lambda_u * self.model.U.square().sum() / 2
-        loss_r = (conf_mat * (self.model.predict() - self.ratings).square()).sum() / 2
+        loss_r = (conf_mat * (self.model.estimate() - self.ratings).square()).sum() / 2
 
         loss = loss_v + loss_u + loss_r
         logging.info(
-            f'  lfm_neg_likelihood={loss:>5f}'
+            f'  mfm_neg_likelihood={loss:>5f}'
             f'  v={loss_v:>5f}'
             f'  u={loss_u:>5f}'
             f'  r={loss_r:>5f}'

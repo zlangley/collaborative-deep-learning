@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 
-class LatentFactorModel:
+class MatrixFactorizationModel:
     def __init__(self, target_shape, latent_size):
         super().__init__()
 
@@ -13,7 +13,7 @@ class LatentFactorModel:
         nn.init.normal_(self.U, 0, 0.1)
         nn.init.normal_(self.V, 0, 0.1)
 
-    def predict(self):
+    def estimate(self):
         return self.U @ self.V.t()
 
     def state_dict(self):
@@ -26,7 +26,7 @@ class LatentFactorModel:
         self.latent_size = self.U.shape[1]
 
     def compute_recall(self, test, k):
-        _, indices = torch.topk(self.predict(), k)
+        _, indices = torch.topk(self.estimate(), k)
         gathered = test.gather(1, indices)
         recall = gathered.sum(dim=1) / test.sum(dim=1)
         return recall.mean()
